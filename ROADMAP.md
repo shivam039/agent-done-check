@@ -74,11 +74,17 @@ PRD: [`docs/PRD-0.13.0-command-output-assertions.md`](./docs/PRD-0.13.0-command-
 
 - Add safe stdout/stderr substring assertions with explicit bounded-capture semantics.
 
-## Current release work: 0.14.0 — Command working directories
+## Completed: 0.14.0 — Command working directories
 
 PRD: [`docs/PRD-0.14.0-command-working-directory.md`](./docs/PRD-0.14.0-command-working-directory.md)
 
 - Let command checks run from a committed subdirectory of the isolated worktree.
+
+## Current release work: 0.15.0 — Command output capture limits
+
+PRD: [`docs/PRD-0.15.0-command-output-limits.md`](./docs/PRD-0.15.0-command-output-limits.md)
+
+- Make the per-stream command output capture limit configurable within a strict bound.
 
 ## Later
 

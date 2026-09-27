@@ -253,6 +253,51 @@ test('command working directories stay inside the isolated worktree', async (t) 
   assert.match(invalidType.stdout, /workingDirectory.*only for command checks/);
 });
 
+test('command output capture limits are per-stream, bounded, and reported', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({
+    command: nodeCommand('process.stdout.write("A".repeat(1500)); process.stdout.write("STDOUT-END"); process.stderr.write("B".repeat(1500)); process.stderr.write("STDERR-END")'),
+    maxOutputBytes: 1024,
+  });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  const check = report.checks[0];
+  assert.equal(check.maxOutputBytes, 1024);
+  assert.equal(Buffer.byteLength(check.stdout), 1024);
+  assert.equal(Buffer.byteLength(check.stderr), 1024);
+  assert.equal(check.outputTruncated.stdout, true);
+  assert.equal(check.outputTruncated.stderr, true);
+  assert.ok(check.stdout.endsWith('STDOUT-END'));
+  assert.ok(check.stderr.endsWith('STDERR-END'));
+
+  config.maxOutputBytes = undefined;
+  config.checks[0].maxOutputBytes = undefined;
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const defaulted = await invoke(root);
+  assert.equal(defaulted.code, 0);
+  const defaultReport = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(defaultReport.checks[0].maxOutputBytes, 24000);
+  assert.equal(defaultReport.checks[0].outputTruncated.stdout, false);
+
+  for (const maxOutputBytes of [0, 1023, 1048577, 1.5, '4096']) {
+    config.checks[0].maxOutputBytes = maxOutputBytes;
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    const invalid = await invoke(root, ['--validate']);
+    assert.equal(invalid.code, 2, String(maxOutputBytes));
+    assert.match(invalid.stdout, /maxOutputBytes/);
+  }
+  config.checks[0].type = 'file';
+  config.checks[0].path = 'agent-done-check.json';
+  config.checks[0].assertion = 'exists';
+  config.checks[0].maxOutputBytes = 2048;
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const invalidType = await invoke(root, ['--validate']);
+  assert.equal(invalidType.code, 2);
+  assert.match(invalidType.stdout, /maxOutputBytes.*only for command checks/);
+});
+
 test('file checks verify exact committed bytes with bounded redacted evidence', async (t) => {
   const root = await repository(t);
   const content = 'release=0.6\n';

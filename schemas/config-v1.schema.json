@@ -52,6 +52,7 @@
         "stdoutContains": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "stderrContains": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "workingDirectory": { "type": "string", "minLength": 1 },
+        "maxOutputBytes": { "type": "integer", "minimum": 1024, "maximum": 1048576 },
         "path": { "type": "string", "minLength": 1 },
         "assertion": { "enum": ["exists", "equals", "contains", "sha256"] },
         "expected": { "type": "string" },

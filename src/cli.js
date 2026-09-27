@@ -551,6 +551,10 @@ function validate(config) {
       if (checkType !== 'command') errors.push(`${at}.workingDirectory: is supported only for command checks.`);
       if (typeof check.workingDirectory !== 'string' || !check.workingDirectory.trim() || check.workingDirectory.includes('\0') || path.isAbsolute(check.workingDirectory) || path.win32.isAbsolute(check.workingDirectory) || path.win32.parse(check.workingDirectory).root || check.workingDirectory.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.workingDirectory: must be a normalized relative directory inside the verified worktree.`);
     }
+    if (typeof check.maxOutputBytes !== 'undefined') {
+      if (checkType !== 'command') errors.push(`${at}.maxOutputBytes: is supported only for command checks.`);
+      if (!Number.isInteger(check.maxOutputBytes) || check.maxOutputBytes < 1024 || check.maxOutputBytes > 1_048_576) errors.push(`${at}.maxOutputBytes: must be an integer from 1024 to 1048576 bytes.`);
+    }
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
       if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
@@ -823,7 +827,9 @@ export async function main(argv = process.argv.slice(2)) {
             cwd: commandCwd,
             env: verificationEnv(config, commit),
             timeoutMs,
+            outputLimit: check.maxOutputBytes ?? MAX_OUTPUT,
           });
+          result.maxOutputBytes = check.maxOutputBytes ?? MAX_OUTPUT;
           if (result.status === 'unverified' && result.error) {
             result.expectedExitCode = check.expectedExitCode ?? 0;
             result.outputAssertions = { stdoutContainsMatched: null, stderrContainsMatched: null };
@@ -858,6 +864,7 @@ export async function main(argv = process.argv.slice(2)) {
           exitCode: result.code,
           expectedExitCode: (check.type ?? 'command') === 'command' ? check.expectedExitCode ?? 0 : undefined,
           workingDirectory: (check.type ?? 'command') === 'command' ? check.workingDirectory ?? '.' : undefined,
+          maxOutputBytes: (check.type ?? 'command') === 'command' ? result.maxOutputBytes ?? check.maxOutputBytes ?? MAX_OUTPUT : undefined,
           outputAssertions: result.outputAssertions,
           signal: result.signal,
           startedAt: checkStarted,

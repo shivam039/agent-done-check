@@ -131,3 +131,7 @@ Command checks may set `stdoutContains` or `stderrContains` to a non-empty subst
 ### Command working directory
 
 Command checks start at the isolated worktree root by default. Set `workingDirectory` to a normalized relative directory such as `packages/api` to run from a committed subdirectory. Absolute paths, traversal, missing directories, files, and symlinks resolving outside the worktree are rejected or reported unverified. Reports record the relative directory, never its host absolute path.
+
+### Command output capture limit
+
+Each stdout and stderr stream keeps its final 24,000 bytes by default. Set command-only `maxOutputBytes` to an integer from 1024 to 1,048,576 to change that per-stream limit. Reports record the effective limit and whether either stream was truncated. Output substring assertions use captured bytes; an absent substring in truncated output remains unverified.
