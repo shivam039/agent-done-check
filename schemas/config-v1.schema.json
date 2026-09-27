@@ -305,6 +305,13 @@
             "maxLength": 4096
           }
         },
+        "requiredResponseHeaders": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$" }
+        },
         "browser": {
           "enum": [
             "chromium",
@@ -429,6 +436,18 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 255
+          }
+        },
+        "requiredResponseHeaders": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
           }
         }
       },

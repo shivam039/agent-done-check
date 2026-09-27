@@ -480,7 +480,7 @@ async function runHttpCheck(commit, check, timeoutMs) {
   const expectedStatuses = check.expectedStatuses ?? [check.expectedStatus ?? 200];
   const evidence = { url: displayUrl(check.url), expectedStatus: expectedStatuses[0], expectedStatuses, statusCode: null, maxBodyBytes,
     commitHeader, revisionBinding: 'missing', bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null,
-    responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
+    responseHeadersPresent: null, responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
   try {
     const response = await fetch(url, { method: 'GET', redirect: 'error', signal: controller.signal });
     evidence.statusCode = response.status;
@@ -491,6 +491,16 @@ async function runHttpCheck(commit, check, timeoutMs) {
       return { status: 'unverified', error: 'The HTTP response did not prove it serves the requested commit.', http: evidence };
     }
     evidence.revisionBinding = 'verified';
+    if (check.requiredResponseHeaders) {
+      evidence.responseHeadersPresent = Object.fromEntries(check.requiredResponseHeaders.map((name) => {
+        const normalizedName = name.toLowerCase();
+        return [normalizedName, response.headers.get(normalizedName) !== null];
+      }));
+      if (Object.values(evidence.responseHeadersPresent).some((present) => !present)) {
+        await response.body?.cancel().catch(() => {});
+        return { status: 'failed', error: 'The bound HTTP response omitted a required header.', http: evidence };
+      }
+    }
     if (check.responseHeaders) {
       evidence.responseHeadersMatched = Object.fromEntries(Object.entries(check.responseHeaders)
         .map(([name, expected]) => [name.toLowerCase(), response.headers.get(name) === expected]));
@@ -542,7 +552,7 @@ function unavailableHttpResult(check) {
   const expectedStatuses = check.expectedStatuses ?? [check.expectedStatus ?? 200];
   return { url: displayUrl(check.url), expectedStatus: expectedStatuses[0], expectedStatuses, statusCode: null, maxBodyBytes: check.maxBodyBytes ?? MAX_HTTP_BODY_BYTES,
     commitHeader: (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase(), revisionBinding: 'missing',
-    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
+    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersPresent: null, responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
 }
 
 function sarifReport(report) {
@@ -695,6 +705,7 @@ function validate(config) {
       }
     }
     if (typeof check.responseHeaders !== 'undefined' && checkType !== 'http') errors.push(`${at}.responseHeaders: is supported only for HTTP checks.`);
+    if (typeof check.requiredResponseHeaders !== 'undefined' && checkType !== 'http') errors.push(`${at}.requiredResponseHeaders: is supported only for HTTP checks.`);
     if (typeof check.bodySha256 !== 'undefined' && checkType !== 'http') errors.push(`${at}.bodySha256: is supported only for HTTP checks.`);
     if (typeof check.bodyJsonPointerEquals !== 'undefined' && checkType !== 'http') errors.push(`${at}.bodyJsonPointerEquals: is supported only for HTTP checks.`);
     if (typeof check.maxBodyBytes !== 'undefined' && checkType !== 'http') errors.push(`${at}.maxBodyBytes: is supported only for HTTP checks.`);
@@ -748,6 +759,17 @@ function validate(config) {
             responseHeaderNames.add(normalizedName);
             if (typeof expected !== 'string' || characterCount(expected) > 4096 || /[\r\n\0]/.test(expected)) errors.push(`${at}.responseHeaders.${name}: expected value must be a string of at most 4096 characters without line breaks or NUL.`);
           }
+        }
+      }
+      if (typeof check.requiredResponseHeaders !== 'undefined') {
+        if (!Array.isArray(check.requiredResponseHeaders) || check.requiredResponseHeaders.length < 1 || check.requiredResponseHeaders.length > 20) errors.push(`${at}.requiredResponseHeaders: must contain 1 to 20 header names.`);
+        else {
+          const names = new Set();
+          check.requiredResponseHeaders.forEach((name, index) => {
+            if (typeof name !== 'string' || name.length > 256 || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) errors.push(`${at}.requiredResponseHeaders[${index}]: invalid HTTP header name.`);
+            else if (names.has(name.toLowerCase())) errors.push(`${at}.requiredResponseHeaders: duplicate header name ${JSON.stringify(name)} ignoring case.`);
+            else names.add(name.toLowerCase());
+          });
         }
       }
       if (typeof check.command !== 'undefined' || typeof check.headers !== 'undefined' || typeof check.method !== 'undefined' || typeof check.body !== 'undefined') errors.push(`${at}: HTTP checks accept only GET requests and do not accept command, headers, method, or body fields.`);
@@ -843,9 +865,10 @@ function markdownReport(report, evidenceFiles, manifestPath) {
       }
     }
     if (check.http) {
-      const headerAssertions = check.http.responseHeadersMatched
-        ? Object.entries(check.http.responseHeadersMatched).map(([name, matched]) => `${name} ${matched ? 'matched' : 'did not match'}`).join(', ')
-        : '';
+      const headerAssertions = [
+        ...Object.entries(check.http.responseHeadersPresent ?? {}).map(([name, present]) => `${name} ${present ? 'present' : 'missing'}`),
+        ...Object.entries(check.http.responseHeadersMatched ?? {}).map(([name, matched]) => `${name} ${matched ? 'matched' : 'did not match'}`),
+      ].join(', ');
       lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; expected ${check.http.expectedStatuses.join(' or ')}; commit binding ${check.http.revisionBinding}${headerAssertions ? `; response headers ${headerAssertions}` : ''}${check.http.bodySha256Matched === true ? '; body SHA-256 matched' : check.http.bodySha256Matched === false ? '; body SHA-256 did not match' : ''}${check.http.bodyJsonPointerMatched === true ? '; JSON Pointer matched' : check.http.bodyJsonPointerMatched === false ? '; JSON Pointer did not match' : ''}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
     }
     if (check.browser?.diagnostics) {

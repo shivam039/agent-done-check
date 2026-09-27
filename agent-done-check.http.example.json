@@ -17,6 +17,7 @@
         "deployment"
       ],
       "maxBodyBytes": 65536,
+      "requiredResponseHeaders": ["content-type"],
       "expectedStatuses": [
         200,
         201
