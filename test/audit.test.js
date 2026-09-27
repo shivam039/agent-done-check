@@ -1254,6 +1254,63 @@ test('HTTP response header assertions run only after commit binding and keep val
   assert.equal((await validateConfig()).code, 2);
 });
 
+test('HTTP content type assertions normalize case and parameters before body reads', async (t) => {
+  const root = await repository(t);
+  let targetCommit;
+  const server = createServer((request, response) => {
+    if (request.url === '/unbound') { response.setHeader('content-type', 'application/json'); response.end('ok'); return; }
+    response.setHeader('x-agent-done-check-commit', targetCommit);
+    if (!['/missing', '/slow-missing'].includes(request.url)) response.setHeader('content-type', request.url === '/invalid' ? 'secret/value' : 'Application/JSON; charset=utf-8');
+    if (request.url === '/slow-missing') {
+      response.writeHead(200);
+      response.write(Buffer.alloc(4096, 97));
+      const timer = setTimeout(() => response.end('late-secret-body'), 3000);
+      response.on('close', () => clearTimeout(timer));
+      return;
+    }
+    response.end('ok');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const port = server.address().port;
+  const config = {
+    version: 1,
+    criteria: [{ id: 'content-type', description: 'Response media type matches.' }],
+    checks: ['/match', '/missing', '/slow-missing', '/unbound'].map((route) => ({
+      id: route.slice(1), type: 'http', url: `http://127.0.0.1:${port}${route}`,
+      expectedContentType: 'application/json', criteria: ['content-type'],
+      ...(route === '/slow-missing' ? { expectedStatus: 200 } : {}),
+    })),
+  };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', '.'); git(root, 'commit', '--quiet', '-m', 'HTTP content type fixture');
+  targetCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const result = await invokeAsync(root, ['--commit', targetCommit]);
+  assert.equal(result.code, 1);
+  const checks = Object.fromEntries(result.report.checks.map((check) => [check.id, check]));
+  assert.equal(checks.match.status, 'passed');
+  assert.equal(checks.match.http.contentTypeMatched, true);
+  assert.equal(checks.missing.status, 'failed');
+  assert.equal(checks.missing.http.contentTypeMatched, false);
+  assert.equal(checks['slow-missing'].status, 'failed', JSON.stringify(checks['slow-missing']));
+  assert.equal(checks['slow-missing'].http.bodyBytes, null);
+  assert.equal(checks.unbound.status, 'unverified');
+  assert.equal(checks.unbound.http.contentTypeMatched, null);
+  assert.ok(!JSON.stringify(result.report).includes('Application/JSON'));
+  assert.ok(!JSON.stringify(result.report).includes('application/json'));
+
+  const validate = async () => { await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config)); return invoke(root, ['--validate']); };
+  config.checks[0].expectedContentType = 'application/json; charset=utf-8';
+  assert.equal((await validate()).code, 2);
+  config.checks[0].expectedContentType = 'bad media type';
+  assert.equal((await validate()).code, 2);
+  config.checks[0].expectedContentType = 'a'.repeat(257);
+  assert.equal((await validate()).code, 2);
+  config.checks[0].expectedContentType = 'application/json';
+  config.checks[0].type = 'command'; config.checks[0].command = 'node --version';
+  assert.equal((await validate()).code, 2);
+});
+
 test('commit-bound JSON Pointer file assertions compare typed values without exposing them', async (t) => {
   const root = await repository(t);
   const expectedSecret = 'json-pointer-private-value';

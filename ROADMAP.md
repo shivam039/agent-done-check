@@ -170,10 +170,16 @@ PRD: [`docs/PRD-0.29.0-http-required-headers.md`](./docs/PRD-0.29.0-http-require
 
 - Assert that selected response header names are present after commit binding.
 
-## Current release work: 0.30.0 — Structured HTTP response checks
+## Completed: 0.30.0 — HTTP content-type assertion
 
 PRD: [`docs/PRD-0.30.0-http-content-type.md`](./docs/PRD-0.30.0-http-content-type.md)
 
-- Validate an HTTP response media type after commit binding and before reading its body.
+- Assert the normalized response media type after commit binding and before reading its body.
+
+## Current release work: 0.31.0 — Bounded HTTP content-type assertion evidence
+
+PRD: [`docs/PRD-0.31.0-http-response-content-type.md`](./docs/PRD-0.31.0-http-response-content-type.md)
+
+- Record normalized response content type evidence without exposing parameters or header values.
 
 ## Later
