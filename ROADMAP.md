@@ -98,11 +98,17 @@ PRD: [`docs/PRD-0.17.0-select-checks.md`](./docs/PRD-0.17.0-select-checks.md)
 
 - Support repeatable check ID selection while keeping omitted criteria unverified.
 
-## Current release work: 0.18.0 — Per-check command environment
+## Completed: 0.18.0 — Per-check command environment
 
 PRD: [`docs/PRD-0.18.0-per-check-environment.md`](./docs/PRD-0.18.0-per-check-environment.md)
 
 - Add isolated environment overrides for command checks.
+
+## Current release work: 0.19.0 — HTTP response header assertions
+
+PRD: [`docs/PRD-0.19.0-http-response-headers.md`](./docs/PRD-0.19.0-http-response-headers.md)
+
+- Verify exact response header values only after the HTTP response is bound to the target commit.
 
 ## Later
 

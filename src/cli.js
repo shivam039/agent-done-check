@@ -435,7 +435,8 @@ async function runHttpCheck(commit, check, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const evidence = { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null,
-    commitHeader, revisionBinding: 'missing', bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null };
+    commitHeader, revisionBinding: 'missing', bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null,
+    responseHeadersMatched: null };
   try {
     const response = await fetch(url, { method: 'GET', redirect: 'error', signal: controller.signal });
     evidence.statusCode = response.status;
@@ -446,6 +447,14 @@ async function runHttpCheck(commit, check, timeoutMs) {
       return { status: 'unverified', error: 'The HTTP response did not prove it serves the requested commit.', http: evidence };
     }
     evidence.revisionBinding = 'verified';
+    if (check.responseHeaders) {
+      evidence.responseHeadersMatched = Object.fromEntries(Object.entries(check.responseHeaders)
+        .map(([name, expected]) => [name.toLowerCase(), response.headers.get(name) === expected]));
+      if (Object.values(evidence.responseHeadersMatched).some((matched) => !matched)) {
+        await response.body?.cancel().catch(() => {});
+        return { status: 'failed', error: 'The bound HTTP response did not satisfy the configured header assertions.', http: evidence };
+      }
+    }
     const reader = response.body?.getReader();
     const chunks = [];
     let bytes = 0;
@@ -480,7 +489,7 @@ async function runHttpCheck(commit, check, timeoutMs) {
 function unavailableHttpResult(check) {
   return { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null,
     commitHeader: (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase(), revisionBinding: 'missing',
-    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null };
+    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersMatched: null };
 }
 
 function sarifReport(report) {
@@ -617,6 +626,7 @@ function validate(config) {
         }
       }
     }
+    if (typeof check.responseHeaders !== 'undefined' && checkType !== 'http') errors.push(`${at}.responseHeaders: is supported only for HTTP checks.`);
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
       if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
@@ -631,6 +641,21 @@ function validate(config) {
       if (typeof check.expectedStatus !== 'undefined' && (!Number.isInteger(check.expectedStatus) || check.expectedStatus < 100 || check.expectedStatus > 599)) errors.push(`${at}.expectedStatus: must be an HTTP status integer from 100 to 599.`);
       if (typeof check.commitHeader !== 'undefined' && (typeof check.commitHeader !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(check.commitHeader))) errors.push(`${at}.commitHeader: must be a valid HTTP header name.`);
       if (typeof check.bodyContains !== 'undefined' && typeof check.bodyContains !== 'string') errors.push(`${at}.bodyContains: must be a string.`);
+      if (typeof check.responseHeaders !== 'undefined') {
+        if (!check.responseHeaders || typeof check.responseHeaders !== 'object' || Array.isArray(check.responseHeaders)) errors.push(`${at}.responseHeaders: must be an object of header names to expected string values.`);
+        else {
+          const responseHeaderNames = new Set();
+          const entries = Object.entries(check.responseHeaders);
+          if (entries.length > 20) errors.push(`${at}.responseHeaders: no more than 20 headers are allowed.`);
+          for (const [name, expected] of entries) {
+            if (name.length > 256 || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) errors.push(`${at}.responseHeaders.${name}: invalid HTTP header name.`);
+            const normalizedName = name.toLowerCase();
+            if (responseHeaderNames.has(normalizedName)) errors.push(`${at}.responseHeaders: duplicate header name ${JSON.stringify(name)} ignoring case.`);
+            responseHeaderNames.add(normalizedName);
+            if (typeof expected !== 'string' || characterCount(expected) > 4096 || /[\r\n\0]/.test(expected)) errors.push(`${at}.responseHeaders.${name}: expected value must be a string of at most 4096 characters without line breaks or NUL.`);
+          }
+        }
+      }
       if (typeof check.command !== 'undefined' || typeof check.headers !== 'undefined' || typeof check.method !== 'undefined' || typeof check.body !== 'undefined') errors.push(`${at}: HTTP checks accept only GET requests and do not accept command, headers, method, or body fields.`);
     }
     if (checkType === 'playwright') {
@@ -723,7 +748,12 @@ function markdownReport(report, evidenceFiles, manifestPath) {
         else if (matched === false) lines.push('', `${stream} substring assertion: did not match.`);
       }
     }
-    if (check.http) lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; commit binding ${check.http.revisionBinding}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
+    if (check.http) {
+      const headerAssertions = check.http.responseHeadersMatched
+        ? Object.entries(check.http.responseHeadersMatched).map(([name, matched]) => `${name} ${matched ? 'matched' : 'did not match'}`).join(', ')
+        : '';
+      lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; commit binding ${check.http.revisionBinding}${headerAssertions ? `; response headers ${headerAssertions}` : ''}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
+    }
     if (check.browser?.diagnostics) {
       const diagnostics = check.browser.diagnostics;
       const dropped = Object.values(diagnostics.dropped ?? {}).reduce((sum, count) => sum + count, 0);

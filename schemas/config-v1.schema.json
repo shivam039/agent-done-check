@@ -62,6 +62,7 @@
         "expectedStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
         "commitHeader": { "type": "string", "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$" },
         "bodyContains": { "type": "string" },
+        "responseHeaders": { "type": "object", "maxProperties": 20, "propertyNames": { "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$", "maxLength": 256 }, "additionalProperties": { "type": "string", "maxLength": 4096 } },
         "browser": { "enum": ["chromium", "firefox", "webkit"] },
         "commitAssertion": {
           "type": "object",

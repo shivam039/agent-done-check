@@ -896,6 +896,85 @@ test('HTTP checks require exact commit binding and keep response content out of 
   assert.ok(!JSON.stringify(report).includes('healthy'));
 });
 
+test('HTTP response header assertions run only after commit binding and keep values private', async (t) => {
+  const root = await repository(t);
+  let targetCommit;
+  const server = createServer((request, response) => {
+    if (request.url === '/unbound') {
+      response.setHeader('x-mode', 'wrong-observed-value');
+      response.end('ok');
+      return;
+    }
+    response.setHeader('x-agent-done-check-commit', targetCommit);
+    if (request.url === '/matched') response.setHeader('X-Mode', 'expected-header-value');
+    if (request.url === '/mismatch') response.setHeader('x-mode', 'wrong-observed-value');
+    if (request.url === '/large-mismatch') {
+      response.setHeader('x-mode', 'wrong-observed-value');
+      response.end(Buffer.alloc(1_048_577, 97));
+      return;
+    }
+    response.end('ok');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const port = server.address().port;
+  const expectedValue = 'expected-header-value';
+  const observedValue = 'wrong-observed-value';
+  const config = {
+    version: 1,
+    criteria: [{ id: 'http-headers', description: 'Bound response header assertions match.' }],
+    checks: ['/matched', '/missing', '/mismatch', '/unbound', '/large-mismatch'].map((route) => ({
+      id: route.slice(1), type: 'http', url: `http://127.0.0.1:${port}${route}`,
+      responseHeaders: { 'X-Mode': expectedValue }, criteria: ['http-headers'],
+    })),
+  };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', '.');
+  git(root, 'commit', '--quiet', '-m', 'HTTP response header fixture');
+  targetCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const result = await invokeAsync(root, ['--commit', targetCommit, '--sarif-output', 'report.sarif', '--junit-output', 'report.xml']);
+  assert.equal(result.code, 1, `${result.stderr}\n${result.stdout}`);
+  const report = result.report;
+  const checks = Object.fromEntries(report.checks.map((check) => [check.id, check]));
+  assert.equal(checks.matched.status, 'passed');
+  assert.deepEqual(checks.matched.http.responseHeadersMatched, { 'x-mode': true });
+  assert.equal(checks.missing.status, 'failed');
+  assert.deepEqual(checks.missing.http.responseHeadersMatched, { 'x-mode': false });
+  assert.equal(checks.mismatch.status, 'failed');
+  assert.deepEqual(checks.mismatch.http.responseHeadersMatched, { 'x-mode': false });
+  assert.equal(checks.unbound.status, 'unverified');
+  assert.equal(checks.unbound.http.responseHeadersMatched, null);
+  assert.equal(checks['large-mismatch'].status, 'failed');
+  assert.deepEqual(checks['large-mismatch'].http.responseHeadersMatched, { 'x-mode': false });
+  for (const value of [expectedValue, observedValue]) assert.ok(!JSON.stringify(report).includes(value));
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  const sarif = await readFile(path.join(root, 'report.sarif'), 'utf8');
+  const junit = await readFile(path.join(root, 'report.xml'), 'utf8');
+  for (const value of [expectedValue, observedValue]) {
+    assert.ok(!markdown.includes(value));
+    assert.ok(!sarif.includes(value));
+    assert.ok(!junit.includes(value));
+  }
+
+  const validateConfig = async () => {
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    return invoke(root, ['--validate']);
+  };
+  config.checks[0].responseHeaders = { 'bad name': 'value' };
+  assert.equal((await validateConfig()).code, 2);
+  config.checks[0].responseHeaders = { 'X-Mode': 'one', 'x-mode': 'two' };
+  assert.equal((await validateConfig()).code, 2);
+  config.checks[0].responseHeaders = Object.fromEntries(Array.from({ length: 21 }, (_, index) => [`x-header-${index}`, 'value']));
+  assert.equal((await validateConfig()).code, 2);
+  config.checks[0].responseHeaders = { 'x-mode': 'x'.repeat(4097) };
+  assert.equal((await validateConfig()).code, 2);
+  config.checks[0].responseHeaders = { 'x-mode': 'line\nbreak' };
+  assert.equal((await validateConfig()).code, 2);
+  config.checks[0].type = 'command';
+  config.checks[0].command = 'node --version';
+  assert.equal((await validateConfig()).code, 2);
+});
+
 test('validation mode emits JSON offline and never runs configured checks', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'agent-done-check-validate-'));
   t.after(() => rm(root, { recursive: true, force: true }));
