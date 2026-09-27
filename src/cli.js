@@ -140,10 +140,13 @@ function signalTree(child, signal) {
     const killed = new Promise((resolve) => {
       if (!child.pid) { resolve(); return; }
       const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-      killer.once('error', resolve);
-      killer.once('close', resolve);
+      const finish = () => {
+        if (!child.killed) child.kill(signal);
+        resolve();
+      };
+      killer.once('error', finish);
+      killer.once('close', finish);
     });
-    child.kill(signal);
     return killed;
   }
   try {
