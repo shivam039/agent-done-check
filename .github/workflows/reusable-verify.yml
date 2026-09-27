@@ -1,0 +1,56 @@
+name: Verify a caller repository with Agent Done Check
+
+on:
+  workflow_call:
+    inputs:
+      tool-ref:
+        description: Full commit SHA or reviewed release tag for shivam039/agent-done-check.
+        required: true
+        type: string
+      config:
+        description: Path to the verification JSON in the caller repository.
+        required: false
+        default: agent-done-check.json
+        type: string
+      node-version:
+        description: Node.js version used to run the verifier and checks.
+        required: false
+        default: '24'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out caller commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out verifier
+        uses: actions/checkout@v4
+        with:
+          repository: shivam039/agent-done-check
+          ref: ${{ inputs.tool-ref }}
+          path: .agent-done-check-tool
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Run commit-bound verification
+        env:
+          CONFIG_PATH: ${{ inputs.config }}
+        run: node .agent-done-check-tool/bin/agent-done-check.js --config "$CONFIG_PATH" --commit "$GITHUB_SHA"
+      - name: Upload verification report and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-done-check-report
+          path: .agent-done-check/
+          if-no-files-found: ignore

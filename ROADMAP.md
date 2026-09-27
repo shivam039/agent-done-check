@@ -1,37 +1,25 @@
 # Agent Done Check roadmap
 
-This document separates capabilities present in the current code from work that is still planned. A roadmap item is not a claim that the feature already exists.
-
-## Current release: 0.3.0
-
-Agent Done Check is a Node.js CLI that evaluates a versioned JSON contract against a selected Git commit.
+## Current release: 0.4.0 — Safer adoption
 
 Implemented:
 
-- JSON validation for criteria, checks, timeouts, environment values, and Playwright scenarios.
-- Fresh detached worktree per check, pinned to the resolved commit.
-- Shell command checks and Playwright browser checks.
-- `passed`, `failed`, and `unverified` result states, with CI-friendly exit codes.
-- Bounded check duration and captured output; source changes and revision movement prevent a check from passing.
-- JSON and Markdown reports, captured evidence, and a SHA-256 artifact manifest.
-- Browser screenshots, browser diagnostics, and an exact-commit marker requirement for passing browser checks.
-- Example configuration and GitHub Actions workflow.
+- By default, checks inherit only platform basics required to run tools. Additional host variables must be listed in `inheritEnv`.
+- `redactEnv` masks named host/config values in captured command output and browser diagnostics. Common bearer, GitHub, OpenAI-style, and JWT token patterns are masked too.
+- The GitHub Actions examples use read-only repository permissions and disable checkout credential persistence; a reusable workflow is available for trusted caller repositories.
+- Project CI is configured to run tests on Linux, macOS, and Windows with Node.js 22 and 24.
+- Known GitHub Actions credential/control variables and npm publish tokens are rejected from `inheritEnv`.
+- Documentation explains the limits of masking, shell execution, and worktree isolation.
 
-Not implemented: OS-level sandboxing, a dedicated GitHub Action, API-check adapters, automatic package publishing, and formal schema compatibility guarantees. The checks run with the host user's privileges; do not run untrusted repository code with this tool.
+Redaction is best-effort. It cannot reliably identify transformed secrets or data in screenshots. Checks remain unsandboxed and run with the host user's privileges; do not run untrusted verification configs or grant untrusted code access to sensitive variables.
 
-## Next: safer adoption
+## Next: stable integration contract
 
-- Add explicit documentation and checks for what environment variables are passed to verification commands.
-- Provide a reviewed GitHub Action or reusable workflow that can run with narrowly scoped permissions.
-- Improve evidence retention and redaction controls while making clear that output redaction cannot guarantee secret removal.
-- Add test coverage for supported operating systems and document platform-specific process termination behavior.
-
-## Later: stable integration contract
-
-- Publish a formal JSON Schema for configuration and reports.
-- Define compatibility guarantees before a 1.0 release.
-- Add additional check adapters only when their revision binding and evidence semantics are clear.
-- Evaluate real sandbox backends before supporting checks from untrusted pull requests.
+- Publish formal JSON Schemas for config, reports, and manifests.
+- Define compatibility guarantees and a migration policy before 1.0.
+- Add check adapters only when their revision binding and evidence semantics are clear.
+- Evaluate an OS-level sandbox before supporting checks from untrusted repositories.
+- Publish the npm package only after the package name and release process are confirmed.
 
 ## Project principles
 

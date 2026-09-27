@@ -15,10 +15,18 @@ const MAX_VIEWPORT_PIXELS = 16_000_000;
 const MAX_CRITERIA = 500;
 const MAX_CHECKS = 100;
 const MAX_STEPS = 500;
+const BASE_ENV_KEYS = process.platform === 'win32'
+  ? ['PATH', 'SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'CI']
+  : ['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'CI'];
 const GIT_OVERRIDE_KEYS = [
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY',
   'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_CONFIG', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
 ];
+const PROTECTED_ENV_KEYS = new Set([
+  'GITHUB_TOKEN', 'GH_TOKEN', 'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN',
+  'ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_RESULTS_URL', 'ACTIONS_CACHE_URL', 'ACTIONS_RUNTIME_URL',
+  'NODE_AUTH_TOKEN', 'NPM_TOKEN',
+]);
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -75,11 +83,49 @@ function shellFor(command) {
 }
 
 function verificationEnv(config, commit) {
-  const env = { ...process.env, ...(config.env ?? {}) };
+  const normalizeKey = (key) => process.platform === 'win32' ? key.toLowerCase() : key;
+  const allowedKeys = new Set([...BASE_ENV_KEYS, ...(config.inheritEnv ?? [])]
+    .filter((key) => !PROTECTED_ENV_KEYS.has(key.toUpperCase()))
+    .map(normalizeKey));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowedKeys.has(process.platform === 'win32' ? key.toLowerCase() : key)));
+  Object.assign(env, config.env ?? {});
   for (const key of GIT_OVERRIDE_KEYS) delete env[key];
   env.GIT_NO_REPLACE_OBJECTS = '1';
   env.AGENT_DONE_CHECK_TARGET_COMMIT = commit;
   return env;
+}
+
+function redactionValues(config) {
+  const values = new Set();
+  const add = (value) => {
+    if (typeof value === 'string' && value.length >= 4) values.add(value);
+  };
+  for (const key of config.redactEnv ?? []) {
+    const hostValue = process.env[key] ?? (process.platform === 'win32'
+      ? Object.entries(process.env).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1]
+      : undefined);
+    add(hostValue);
+    add(config.env?.[key]);
+  }
+  for (const check of config.checks ?? []) for (const step of check.steps ?? []) add(step.value);
+  return [...values].sort((a, b) => b.length - a.length);
+}
+
+function redactString(value, values) {
+  let text = String(value ?? '')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, '[REDACTED]')
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, '[REDACTED]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED]');
+  for (const secret of values) text = text.replaceAll(secret, '[REDACTED]');
+  return text;
+}
+
+function redactResult(result, values) {
+  for (const key of ['stdout', 'stderr', 'error']) {
+    if (typeof result[key] === 'string') result[key] = redactString(result[key], values);
+  }
+  return result;
 }
 
 async function runGit(cwd, args) {
@@ -210,6 +256,17 @@ function validate(config) {
     else for (const [key, value] of Object.entries(config.env)) {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) errors.push(`env.${key}: invalid environment variable name.`);
       if (typeof value !== 'string') errors.push(`env.${key}: value must be a string.`);
+    }
+  }
+  for (const field of ['inheritEnv', 'redactEnv']) {
+    if (typeof config[field] === 'undefined') continue;
+    if (!Array.isArray(config[field])) errors.push(`${field}: must be an array of environment variable names.`);
+    else {
+      if (new Set(config[field]).size !== config[field].length) errors.push(`${field}: duplicate environment variable name.`);
+      for (const [index, key] of config[field].entries()) {
+        if (typeof key !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) errors.push(`${field}[${index}]: invalid environment variable name.`);
+        else if (field === 'inheritEnv' && PROTECTED_ENV_KEYS.has(key.toUpperCase())) errors.push(`${field}[${index}]: this runner credential/control variable cannot be inherited.`);
+      }
     }
   }
   if (!Array.isArray(config.criteria) || config.criteria.length === 0) errors.push('criteria: define at least one criterion.');
@@ -361,6 +418,7 @@ export async function main(argv = process.argv.slice(2)) {
   const startedAt = new Date().toISOString();
   const runId = randomUUID();
   const configSha256 = sha256(configContents);
+  const secretsToRedact = redactionValues(config);
   const evidenceDirectory = path.join(path.dirname(output), 'evidence', runId);
   const results = [];
 
@@ -402,7 +460,7 @@ export async function main(argv = process.argv.slice(2)) {
               cwd: worktree,
               env: verificationEnv(config, commit),
               timeoutMs: Math.max(1, deadline - Date.now()),
-            input: JSON.stringify({ check, evidenceDirectory, timeoutMs, commit }),
+              input: JSON.stringify({ check, evidenceDirectory, timeoutMs, commit, redactions: secretsToRedact }),
             });
             let browserResult;
             try { browserResult = JSON.parse(execution.stdout.trim()); }
@@ -425,6 +483,7 @@ export async function main(argv = process.argv.slice(2)) {
             timeoutMs,
           });
         }
+        redactResult(result, secretsToRedact);
         const mutation = await worktreeMutation(worktree, commit);
         if (mutation) {
           const outcome = result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed');
@@ -435,7 +494,7 @@ export async function main(argv = process.argv.slice(2)) {
           id: check.id,
           type: check.type ?? 'command',
           criteria: check.criteria,
-          command: check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`,
+          command: redactString(check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, secretsToRedact),
           status: result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed'),
           error: result.error,
           exitCode: result.code,
@@ -448,7 +507,7 @@ export async function main(argv = process.argv.slice(2)) {
           browser: result.browser,
         });
       } catch (error) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: check.command, status: 'unverified', error: error.message, startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: check.command, status: 'unverified', error: redactString(error.message, secretsToRedact), startedAt: checkStarted });
       } finally {
         await runGit(repository, ['worktree', 'remove', '--force', worktree]);
       }

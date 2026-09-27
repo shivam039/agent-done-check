@@ -85,6 +85,55 @@ test('command report, evidence files, and manifest hashes agree', async (t) => {
   assert.match(markdown, /&lt;img/);
 });
 
+test('checks receive only baseline and explicitly allowed host environment; marked values are redacted', async (t) => {
+  const root = await repository(t);
+  const hostKey = 'AGENT_DONE_CHECK_PRIVATE_TEST_VALUE';
+  const previous = process.env[hostKey];
+  process.env[hostKey] = 'host-secret-test-value';
+  t.after(() => {
+    if (previous === undefined) delete process.env[hostKey];
+    else process.env[hostKey] = previous;
+  });
+  const config = baseConfig({
+    command: nodeCommand('console.log(JSON.stringify({ host: process.env.AGENT_DONE_CHECK_PRIVATE_TEST_VALUE ?? null, configured: process.env.CONFIGURED_TEST_VALUE, bearer: "Bearer syntheticbearertoken123456", github: "ghp_123456789012345678901234" }))'),
+  });
+  config.env = { CONFIGURED_TEST_VALUE: 'configured-secret-test-value' };
+  config.redactEnv = [hostKey, 'CONFIGURED_TEST_VALUE'];
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+
+  const result = await invoke(root);
+  assert.equal(result.code, 0, result.stderr);
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.deepEqual(JSON.parse(report.checks[0].stdout), {
+    host: null,
+    configured: '[REDACTED]',
+    bearer: 'Bearer [REDACTED]',
+    github: '[REDACTED]',
+  });
+  assert.ok(!JSON.stringify(report).includes('host-secret-test-value'));
+  assert.ok(!JSON.stringify(report).includes('configured-secret-test-value'));
+});
+
+test('invalid inherited environment configuration is rejected before checks run', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ command: nodeCommand('process.exit(9)') });
+  config.inheritEnv = 'TOKEN';
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root);
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /inheritEnv: must be an array/);
+});
+
+test('runner credentials cannot be added to the inherited environment allowlist', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ command: nodeCommand('process.exit(9)') });
+  config.inheritEnv = ['ACTIONS_RUNTIME_TOKEN'];
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root);
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /runner credential\/control variable cannot be inherited/);
+});
+
 test('invalid browser URL is rejected before a worktree is created', async (t) => {
   const root = await repository(t);
   await commitFiles(root, {
@@ -113,9 +162,10 @@ module.exports = {
             goto: async (url) => {
               if (fs.readFileSync(process.env.SETUP_MARKER, 'utf8') !== 'x') throw new Error('setup did not run exactly once');
               handlers.response({ status: () => 401, url: () => url });
+              handlers.console({ type: () => 'error', location: () => ({ url }), text: () => 'failed to submit replace-with-test-credential' });
             },
             waitForURL: async () => {},
-            locator: () => ({ first() { return this; }, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async () => process.env.AGENT_DONE_CHECK_TARGET_COMMIT }),
+            locator: () => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async () => process.env.AGENT_DONE_CHECK_TARGET_COMMIT }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -129,7 +179,10 @@ module.exports = {
     url: 'https://user:password@staging.example.test/dashboard?token=do-not-report#secret',
     commitAssertion: { selector: 'meta[name=commit-sha]', attribute: 'content' },
     setupCommand: nodeCommand('require("node:fs").appendFileSync(process.env.SETUP_MARKER, "x")'),
-    steps: [{ action: 'expectUrl', value: '/dashboard' }],
+    steps: [
+      { action: 'fill', selector: '[name=password]', value: 'replace-with-test-credential' },
+      { action: 'expectUrl', value: '/dashboard' },
+    ],
     failOnHttpError: false,
   });
   config.criteria.push({ id: 'unbound', description: 'An unbound URL cannot pass as commit evidence.' });
@@ -158,6 +211,7 @@ module.exports = {
   assert.equal(check.browser.diagnostics.browserVersion, 'fake-chromium-1');
   assert.equal(check.browser.diagnostics.httpErrors.length, 1);
   assert.equal(check.browser.revisionBinding.status, 'verified');
+  assert.equal(check.browser.diagnostics.consoleErrors[0].text, 'failed to submit [REDACTED]');
   assert.equal(check.browser.url, 'https://staging.example.test/dashboard');
   assert.ok(!JSON.stringify(report).includes('do-not-report'));
   assert.ok(!JSON.stringify(report).includes('password'));

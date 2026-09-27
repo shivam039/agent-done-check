@@ -9,8 +9,14 @@ function boundedText(value) {
   return text.length > MAX_DIAGNOSTIC_TEXT ? `${text.slice(0, MAX_DIAGNOSTIC_TEXT)}…[truncated]` : text;
 }
 
-function redactText(value, sensitiveUrl) {
-  const sanitized = boundedText(value).replaceAll(sensitiveUrl, displayUrl(sensitiveUrl));
+function redactText(value, sensitiveUrl, redactions) {
+  let sanitized = boundedText(value).replaceAll(sensitiveUrl, displayUrl(sensitiveUrl));
+  sanitized = sanitized
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, '[REDACTED]')
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, '[REDACTED]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED]');
+  for (const secret of redactions) sanitized = sanitized.replaceAll(secret, '[REDACTED]');
   return sanitized.replace(/https?:\/\/[^\s"'<>]+/g, (url) => displayUrl(url));
 }
 
@@ -83,7 +89,7 @@ async function main() {
     process.stdin.on('end', () => resolve(input));
     process.stdin.on('error', reject);
   }));
-  const { check, evidenceDirectory, timeoutMs, commit } = request;
+  const { check, evidenceDirectory, timeoutMs, commit, redactions = [] } = request;
   const diagnostics = {
     consoleErrors: [], pageErrors: [], requestFailures: [], httpErrors: [],
     dropped: { consoleErrors: 0, pageErrors: 0, requestFailures: 0, httpErrors: 0 },
@@ -118,12 +124,12 @@ async function main() {
       if (message.type() === 'error') {
         const location = message.location();
         if (location.url) location.url = displayUrl(location.url);
-        record('consoleErrors', { text: redactText(message.text(), check.url), location });
+        record('consoleErrors', { text: redactText(message.text(), check.url, redactions), location });
       }
     });
-    page.on('pageerror', (error) => record('pageErrors', { message: redactText(error.message, check.url) }));
+    page.on('pageerror', (error) => record('pageErrors', { message: redactText(error.message, check.url, redactions) }));
     page.on('requestfailed', (requestEvent) => record('requestFailures', {
-      url: displayUrl(requestEvent.url()), method: requestEvent.method(), error: boundedText(requestEvent.failure()?.errorText ?? 'request failed'),
+      url: displayUrl(requestEvent.url()), method: requestEvent.method(), error: redactText(requestEvent.failure()?.errorText ?? 'request failed', check.url, redactions),
     }));
     page.on('response', (response) => {
       if (response.status() >= 400) record('httpErrors', { url: displayUrl(response.url()), status: response.status() });
@@ -137,8 +143,9 @@ async function main() {
         const observed = check.commitAssertion.attribute
           ? await locator.getAttribute(check.commitAssertion.attribute)
           : await locator.textContent();
-        revisionBinding.observed = observed?.trim() ?? null;
-        if (revisionBinding.observed === commit) {
+        const observedValue = observed?.trim() ?? null;
+        revisionBinding.observed = observedValue == null ? null : redactText(observedValue, check.url, redactions);
+        if (observedValue === commit) {
           revisionBinding.status = 'verified';
           bindingError = null;
         } else {
@@ -179,14 +186,14 @@ async function main() {
       artifacts.push({ path: filePath, role: 'browser-screenshot', mediaType: 'image/png' });
     } catch (error) {
       screenshotFailure = error;
-      diagnostics.screenshotError = redactText(error.message, check.url);
+      diagnostics.screenshotError = redactText(error.message, check.url, redactions);
       if (status === 'passed') status = 'unverified';
     }
   }
   await browser?.close().catch(() => {});
   const result = {
     status,
-    error: failure ? redactText(failure.message, check.url) : screenshotFailure ? redactText(screenshotFailure.message, check.url) : undefined,
+    error: failure ? redactText(failure.message, check.url, redactions) : screenshotFailure ? redactText(screenshotFailure.message, check.url, redactions) : undefined,
     revisionBinding,
     diagnostics,
     artifacts,
