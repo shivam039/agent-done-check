@@ -154,6 +154,47 @@ test('command checks pass only on their configured expected exit code', async (t
   assert.match(invalidCode.stderr, /expectedExitCode/);
 });
 
+test('command output substring assertions report pass, fail, and truncated uncertainty', async (t) => {
+  const root = await repository(t);
+  const config = {
+    version: 1,
+    criteria: [{ id: 'output', description: 'Command output contains required evidence.' }],
+    checks: [
+      { id: 'matching', command: nodeCommand('console.log("OUT-NEEDLE"); console.error("ERR-NEEDLE")'), stdoutContains: 'OUT-NEEDLE', stderrContains: 'ERR-NEEDLE', criteria: ['output'] },
+      { id: 'missing', command: nodeCommand('console.log("complete output")'), stdoutContains: 'NEVER-PRINTED', criteria: ['output'] },
+      { id: 'truncated', command: nodeCommand('console.log("EARLY-NEEDLE"); console.log("x".repeat(30000))'), stdoutContains: 'EARLY-NEEDLE', criteria: ['output'] },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root);
+  assert.equal(result.code, 1);
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  const checks = Object.fromEntries(report.checks.map((check) => [check.id, check]));
+  assert.equal(checks.matching.status, 'passed');
+  assert.deepEqual(checks.matching.outputAssertions, { stdoutContainsMatched: true, stderrContainsMatched: true });
+  assert.equal(checks.missing.status, 'failed');
+  assert.equal(checks.missing.outputAssertions.stdoutContainsMatched, false);
+  assert.equal(checks.truncated.status, 'unverified');
+  assert.equal(checks.truncated.outputTruncated.stdout, true);
+  assert.doesNotMatch(JSON.stringify(checks.matching.outputAssertions), /OUT-NEEDLE|ERR-NEEDLE/);
+  assert.doesNotMatch(JSON.stringify(checks.missing.outputAssertions), /NEVER-PRINTED/);
+  assert.doesNotMatch(JSON.stringify(checks.truncated.outputAssertions), /EARLY-NEEDLE/);
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  assert.match(markdown, /stdout substring assertion: not found in the captured, truncated output; result is unverified/);
+  assert.ok(!markdown.includes('NEVER-PRINTED'));
+  assert.ok(!markdown.includes('OUT-NEEDLE'));
+  assert.ok(!markdown.includes('ERR-NEEDLE'));
+  assert.ok(!markdown.includes('EARLY-NEEDLE'));
+
+  config.checks[0].type = 'file';
+  config.checks[0].path = 'agent-done-check.json';
+  config.checks[0].assertion = 'exists';
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const invalid = await invoke(root, ['--validate']);
+  assert.equal(invalid.code, 2);
+  assert.match(invalid.stdout, /stdoutContains.*only for command checks/);
+});
+
 test('file checks verify exact committed bytes with bounded redacted evidence', async (t) => {
   const root = await repository(t);
   const content = 'release=0.6\n';

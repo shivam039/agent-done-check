@@ -123,3 +123,7 @@ Pass `--junit-output <file>` during a normal audit to write one testcase per con
 ### Expected command exit code
 
 Command checks pass on exit code 0 by default. Set `expectedExitCode` on a command check to use a different integer from 0 through 255. A different completed exit code fails; a timeout remains unverified. The check result records the expected value. This option applies only to command checks.
+
+### Command output assertions
+
+Command checks may set `stdoutContains` or `stderrContains` to a non-empty substring of at most 4096 characters. The report records only whether each assertion matched; it does not record the configured text. If a substring is absent from complete captured output the check fails. If it is absent from truncated output, the check is unverified because the missing prefix was not observed. Matches are evaluated before report redaction.

@@ -542,6 +542,11 @@ function validate(config) {
       if (checkType !== 'command') errors.push(`${at}.expectedExitCode: is supported only for command checks.`);
       if (!Number.isInteger(check.expectedExitCode) || check.expectedExitCode < 0 || check.expectedExitCode > 255) errors.push(`${at}.expectedExitCode: must be an integer from 0 to 255.`);
     }
+    for (const field of ['stdoutContains', 'stderrContains']) {
+      if (typeof check[field] === 'undefined') continue;
+      if (checkType !== 'command') errors.push(`${at}.${field}: is supported only for command checks.`);
+      if (typeof check[field] !== 'string' || !check[field].length || check[field].length > 4096) errors.push(`${at}.${field}: must be a non-empty string of at most 4096 characters.`);
+    }
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
       if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
@@ -638,6 +643,14 @@ function markdownReport(report, evidenceFiles, manifestPath) {
     if (check.file) {
       const outcome = check.file.matched ? 'matched' : check.status === 'failed' ? 'did not match' : 'could not be verified';
       lines.push('', `File assertion: ${markdownCode(check.file.assertion)} on ${markdownCode(check.file.path)} — ${outcome}${check.file.sha256 ? `; SHA-256 ${markdownCode(check.file.sha256)}` : ''}${check.file.bytes != null ? `; ${check.file.bytes} bytes` : ''}.`);
+    }
+    if (check.outputAssertions) {
+      for (const stream of ['stdout', 'stderr']) {
+        const matched = check.outputAssertions[`${stream}ContainsMatched`];
+        if (matched === true) lines.push('', `${stream} substring assertion: matched.`);
+        else if (matched === false && check.outputTruncated?.[stream]) lines.push('', `${stream} substring assertion: not found in the captured, truncated output; result is unverified.`);
+        else if (matched === false) lines.push('', `${stream} substring assertion: did not match.`);
+      }
     }
     if (check.http) lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; commit binding ${check.http.revisionBinding}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
     if (check.browser?.diagnostics) {
@@ -794,7 +807,16 @@ export async function main(argv = process.argv.slice(2)) {
             timeoutMs,
           });
           result.expectedExitCode = check.expectedExitCode ?? 0;
-          result.status = result.signal === 'TIMEOUT' ? 'unverified' : result.code === result.expectedExitCode ? 'passed' : 'failed';
+          const stdoutContainsMatched = typeof check.stdoutContains === 'string' ? result.stdout.includes(check.stdoutContains) : null;
+          const stderrContainsMatched = typeof check.stderrContains === 'string' ? result.stderr.includes(check.stderrContains) : null;
+          result.outputAssertions = { stdoutContainsMatched, stderrContainsMatched };
+          const assertionFailed = (stdoutContainsMatched === false && !result.stdoutTruncated)
+            || (stderrContainsMatched === false && !result.stderrTruncated);
+          const assertionUnverified = (stdoutContainsMatched === false && result.stdoutTruncated)
+            || (stderrContainsMatched === false && result.stderrTruncated);
+          result.status = result.signal === 'TIMEOUT' ? 'unverified'
+            : result.code !== result.expectedExitCode || assertionFailed ? 'failed'
+              : assertionUnverified ? 'unverified' : 'passed';
         }
         redactResult(result, secretsToRedact);
         const mutation = await worktreeMutation(worktree, commit);
@@ -812,6 +834,7 @@ export async function main(argv = process.argv.slice(2)) {
           error: result.error,
           exitCode: result.code,
           expectedExitCode: (check.type ?? 'command') === 'command' ? check.expectedExitCode ?? 0 : undefined,
+          outputAssertions: result.outputAssertions,
           signal: result.signal,
           startedAt: checkStarted,
           durationMs: Date.now() - Date.parse(checkStarted),

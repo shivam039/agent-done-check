@@ -49,6 +49,8 @@
         "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 1800000 },
         "command": { "type": "string", "minLength": 1 },
         "expectedExitCode": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "stdoutContains": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "stderrContains": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "path": { "type": "string", "minLength": 1 },
         "assertion": { "enum": ["exists", "equals", "contains", "sha256"] },
         "expected": { "type": "string" },
