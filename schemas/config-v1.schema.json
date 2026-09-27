@@ -253,7 +253,8 @@
             "equals",
             "contains",
             "sha256",
-            "jsonPointerEquals"
+            "jsonPointerEquals",
+            "jsonPointerExists"
           ]
         },
         "pointer": {
@@ -512,6 +513,39 @@
                     "if": {
                       "properties": {
                         "assertion": {
+                          "enum": [
+                            "jsonPointerEquals",
+                            "jsonPointerExists"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "assertion"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "pointer": {}
+                      },
+                      "required": [
+                        "pointer"
+                      ]
+                    },
+                    "else": {
+                      "properties": {
+                        "pointer": {}
+                      },
+                      "not": {
+                        "required": [
+                          "pointer"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "assertion": {
                           "const": "jsonPointerEquals"
                         }
                       },
@@ -521,13 +555,30 @@
                     },
                     "then": {
                       "properties": {
-                        "pointer": {},
                         "expected": {}
                       },
                       "required": [
-                        "pointer",
                         "expected"
                       ]
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "assertion": {
+                          "const": "jsonPointerExists"
+                        }
+                      },
+                      "required": [
+                        "assertion"
+                      ]
+                    },
+                    "then": {
+                      "not": {
+                        "required": [
+                          "expected"
+                        ]
+                      }
                     }
                   }
                 ]

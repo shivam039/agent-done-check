@@ -1036,13 +1036,17 @@ test('HTTP response header assertions run only after commit binding and keep val
 test('commit-bound JSON Pointer file assertions compare typed values without exposing them', async (t) => {
   const root = await repository(t);
   const expectedSecret = 'json-pointer-private-value';
-  const document = JSON.parse(`{"services":[{"enabled":true,"quota":null,"limits":{"burst":5,"steady":2}}],"a/b":{"~key":${JSON.stringify(expectedSecret)}},"__proto__":{"polluted":true}}`);
-  const expectedRoot = JSON.parse(`{"__proto__":{"polluted":true},"a/b":{"~key":${JSON.stringify(expectedSecret)}},"services":[{"enabled":true,"limits":{"steady":2,"burst":5},"quota":null}]}`);
+  const document = JSON.parse(`{"services":[{"enabled":true,"disabled":false,"quota":null,"limits":{"burst":5,"steady":2}}],"a/b":{"~key":${JSON.stringify(expectedSecret)}},"__proto__":{"polluted":true}}`);
+  const expectedRoot = JSON.parse(`{"__proto__":{"polluted":true},"a/b":{"~key":${JSON.stringify(expectedSecret)}},"services":[{"enabled":true,"disabled":false,"limits":{"steady":2,"burst":5},"quota":null}]}`);
   const config = {
     version: 1,
     criteria: [{ id: 'json-file', description: 'Committed JSON values match their pointers.' }],
     checks: [
       { id: 'root-object', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '', expected: expectedRoot, criteria: ['json-file'] },
+      { id: 'exists-null', type: 'file', path: 'data.json', assertion: 'jsonPointerExists', pointer: '/services/0/quota', criteria: ['json-file'] },
+      { id: 'exists-false', type: 'file', path: 'data.json', assertion: 'jsonPointerExists', pointer: '/services/0/disabled', criteria: ['json-file'] },
+      { id: 'exists-empty-pointer', type: 'file', path: 'data.json', assertion: 'jsonPointerExists', pointer: '', criteria: ['json-file'] },
+      { id: 'missing-pointer', type: 'file', path: 'data.json', assertion: 'jsonPointerExists', pointer: '/services/9', criteria: ['json-file'] },
       { id: 'boolean', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/services/0/enabled', expected: true, criteria: ['json-file'] },
       { id: 'null', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/services/0/quota', expected: null, criteria: ['json-file'] },
       { id: 'object-order', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/services/0/limits', expected: { steady: 2, burst: 5 }, criteria: ['json-file'] },
@@ -1064,7 +1068,8 @@ test('commit-bound JSON Pointer file assertions compare typed values without exp
   assert.equal(result.code, 1, result.stderr || JSON.stringify(result.report?.checks));
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   const checks = Object.fromEntries(report.checks.map((check) => [check.id, check]));
-  for (const id of ['root-object', 'boolean', 'null', 'object-order', 'escaped', 'prototype-key']) assert.equal(checks[id].status, 'passed', id);
+  for (const id of ['root-object', 'exists-null', 'exists-false', 'exists-empty-pointer', 'boolean', 'null', 'object-order', 'escaped', 'prototype-key']) assert.equal(checks[id].status, 'passed', id);
+  assert.equal(checks['missing-pointer'].status, 'failed');
   assert.equal(checks['invalid-array-index'].status, 'failed');
   assert.equal(checks['wrong-type'].status, 'failed');
   assert.equal(checks.malformed.status, 'failed');
@@ -1092,6 +1097,11 @@ test('commit-bound JSON Pointer file assertions compare typed values without exp
   const missingExpected = await invoke(root, ['--validate']);
   assert.equal(missingExpected.code, 2);
   assert.match(missingExpected.stdout, /expected/);
+  config.checks[0] = { id: 'exists-with-value', type: 'file', path: 'data.json', assertion: 'jsonPointerExists', pointer: '/services/0/quota', expected: null, criteria: ['json-file'] };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const unusedExpected = await invoke(root, ['--validate']);
+  assert.equal(unusedExpected.code, 2);
+  assert.match(unusedExpected.stdout, /expected/);
 });
 
 test('validation mode emits JSON offline and never runs configured checks', async (t) => {

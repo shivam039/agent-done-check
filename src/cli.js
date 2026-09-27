@@ -460,12 +460,12 @@ async function runFileCheck(repository, commit, check) {
     let contents;
     try { contents = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
     catch { return { status: 'unverified', error: 'Text assertions require valid UTF-8 content.', file }; }
-    if (check.assertion === 'jsonPointerEquals') {
+    if (check.assertion === 'jsonPointerEquals' || check.assertion === 'jsonPointerExists') {
       let document;
       try { document = JSON.parse(contents); }
       catch { return { status: 'failed', error: 'The committed file does not contain valid JSON.', file }; }
       const resolved = resolveJsonPointer(document, check.pointer);
-      file.matched = resolved.found && jsonValuesEqual(resolved.value, check.expected);
+      file.matched = check.assertion === 'jsonPointerExists' ? resolved.found : resolved.found && jsonValuesEqual(resolved.value, check.expected);
     } else file.matched = check.assertion === 'equals' ? contents === check.expected : contents.includes(check.expected);
   }
   return { status: file.matched ? 'passed' : 'failed', error: file.matched ? undefined : 'The file did not satisfy the configured assertion.', file };
@@ -673,17 +673,18 @@ function validate(config) {
     if (typeof check.responseHeaders !== 'undefined' && checkType !== 'http') errors.push(`${at}.responseHeaders: is supported only for HTTP checks.`);
     if (typeof check.bodySha256 !== 'undefined' && checkType !== 'http') errors.push(`${at}.bodySha256: is supported only for HTTP checks.`);
     if (typeof check.maxBodyBytes !== 'undefined' && checkType !== 'http') errors.push(`${at}.maxBodyBytes: is supported only for HTTP checks.`);
-    if (typeof check.pointer !== 'undefined' && (checkType !== 'file' || check.assertion !== 'jsonPointerEquals')) errors.push(`${at}.pointer: is supported only with the jsonPointerEquals file assertion.`);
+    if (typeof check.pointer !== 'undefined' && (checkType !== 'file' || !['jsonPointerEquals', 'jsonPointerExists'].includes(check.assertion))) errors.push(`${at}.pointer: is supported only with JSON Pointer file assertions.`);
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
-      if (!['exists', 'equals', 'contains', 'sha256', 'jsonPointerEquals'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, sha256, or jsonPointerEquals.`);
+      if (!['exists', 'equals', 'contains', 'sha256', 'jsonPointerEquals', 'jsonPointerExists'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, sha256, jsonPointerEquals, or jsonPointerExists.`);
       if (['equals', 'contains', 'sha256'].includes(check.assertion) && typeof check.expected !== 'string') errors.push(`${at}.expected: must be a string for ${check.assertion}.`);
       if (check.assertion === 'sha256' && typeof check.expected === 'string' && !/^[a-f0-9]{64}$/.test(check.expected)) errors.push(`${at}.expected: sha256 requires a 64-character lowercase hexadecimal digest.`);
       if (check.assertion === 'exists' && typeof check.expected !== 'undefined') errors.push(`${at}.expected: is not used with the exists assertion.`);
-      if (check.assertion === 'jsonPointerEquals') {
-        if (!Object.prototype.hasOwnProperty.call(check, 'expected')) errors.push(`${at}.expected: required for jsonPointerEquals.`);
+      if (check.assertion === 'jsonPointerEquals' || check.assertion === 'jsonPointerExists') {
+        if (check.assertion === 'jsonPointerEquals' && !Object.prototype.hasOwnProperty.call(check, 'expected')) errors.push(`${at}.expected: required for jsonPointerEquals.`);
+        if (check.assertion === 'jsonPointerExists' && typeof check.expected !== 'undefined') errors.push(`${at}.expected: is not used with jsonPointerExists.`);
         if (!validJsonPointer(check.pointer)) errors.push(`${at}.pointer: must be an RFC 6901 JSON Pointer of at most 4096 characters.`);
-      } else if (typeof check.pointer !== 'undefined') errors.push(`${at}.pointer: is only used with jsonPointerEquals.`);
+      } else if (typeof check.pointer !== 'undefined') errors.push(`${at}.pointer: is only used with JSON Pointer assertions.`);
     }
     if (checkType === 'http') {
       let parsed;
