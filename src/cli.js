@@ -137,13 +137,14 @@ async function runGit(cwd, args) {
 
 function signalTree(child, signal) {
   if (process.platform === 'win32') {
-    if (child.pid) {
+    const killed = new Promise((resolve) => {
+      if (!child.pid) { resolve(); return; }
       const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-      killer.on('error', () => {});
-      killer.unref();
-    }
+      killer.once('error', resolve);
+      killer.once('close', resolve);
+    });
     child.kill(signal);
-    return;
+    return killed;
   }
   try {
     if (child.pid) process.kill(-child.pid, signal);
@@ -151,6 +152,7 @@ function signalTree(child, signal) {
   } catch {
     child.kill(signal);
   }
+  return Promise.resolve();
 }
 
 async function writeAtomic(filename, content, runId) {
@@ -206,8 +208,8 @@ function run(command, args, options = {}) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      signalTree(child, 'SIGTERM');
-      reject(error);
+        signalTree(child, 'SIGTERM');
+        reject(error);
     });
     child.stdin.end(input ?? '');
     child.on('error', (error) => {
@@ -224,9 +226,9 @@ function run(command, args, options = {}) {
       resolve(snapshot(code, signal));
     });
     if (timeoutMs) {
-      timer = setTimeout(() => {
+      timer = setTimeout(async () => {
         settled = true;
-        signalTree(child, 'SIGTERM');
+        await signalTree(child, 'SIGTERM');
         if (process.platform !== 'win32') setTimeout(() => signalTree(child, 'SIGKILL'), 1500).unref();
         resolve(snapshot(null, 'TIMEOUT'));
       }, timeoutMs);
@@ -615,6 +617,6 @@ export async function main(argv = process.argv.slice(2)) {
     if (status !== 'passed') process.exitCode = 1;
   } finally {
     await runGit(repository, ['worktree', 'prune', '--expire', 'now']);
-    await rm(checkout, { recursive: true, force: true });
+      await rm(checkout, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }
