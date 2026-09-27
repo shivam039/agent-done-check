@@ -33,8 +33,13 @@ function baseConfig(check) {
 }
 
 function nodeCommand(source) {
-  const encoded = Buffer.from(source).toString('base64');
-  return `node -e "eval(Buffer.from('${encoded}', 'base64').toString())"`;
+  if (process.platform !== 'win32') {
+    const encoded = Buffer.from(source).toString('base64');
+    return `node -e "eval(Buffer.from('${encoded}', 'base64').toString())"`;
+  }
+  // Avoid nested quotes: cmd.exe rewrites quoted -e arguments before Node receives them.
+  const bytes = [...Buffer.from(source)].join(',');
+  return `node -e eval(Buffer.from([${bytes}]).toString())`;
 }
 
 async function commitFiles(root, files) {
