@@ -544,6 +544,11 @@
             "boolean",
             "null"
           ]
+        },
+        "maxBodyBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
         }
       },
       "additionalProperties": true

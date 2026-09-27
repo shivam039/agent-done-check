@@ -40,6 +40,18 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
     criteria: [{ id: 'json', description: 'The committed JSON value matches.' }],
     checks: [{ id: 'json-value', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/a~1b/~0key', expected: { ok: true }, criteria: ['json'] }],
   };
+  const httpConfig = JSON.parse(await readFile(path.join(root, 'agent-done-check.http.example.json'), 'utf8'));
+  assertValid(validateConfig, httpConfig, 'HTTP body limit config');
+  httpConfig.checks[0].maxBodyBytes = 1;
+  assertValid(validateConfig, httpConfig, 'minimum HTTP body limit');
+  httpConfig.checks[0].maxBodyBytes = 1048576;
+  assertValid(validateConfig, httpConfig, 'maximum HTTP body limit');
+  httpConfig.checks[0].maxBodyBytes = 0;
+  assert.equal(validateConfig(httpConfig), false);
+  httpConfig.checks[0].maxBodyBytes = 1.5;
+  assert.equal(validateConfig(httpConfig), false);
+  httpConfig.checks[0].maxBodyBytes = 1048577;
+  assert.equal(validateConfig(httpConfig), false);
   assertValid(validateConfig, jsonPointerConfig, 'JSON Pointer file config');
   jsonPointerConfig.checks[0].pointer = '/bad~2escape';
   assert.equal(validateConfig(jsonPointerConfig), false);
