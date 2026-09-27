@@ -1,8 +1,14 @@
 {
   "version": 1,
   "criteria": [
-    { "id": "settings", "description": "The committed application setting has the expected value." },
-    { "id": "license", "description": "The repository contains a license file." }
+    {
+      "id": "settings",
+      "description": "The committed application setting has the expected value."
+    },
+    {
+      "id": "license",
+      "description": "The repository contains a license file."
+    }
   ],
   "checks": [
     {
@@ -11,7 +17,9 @@
       "path": "config/application.txt",
       "assertion": "contains",
       "expected": "feature_enabled=true",
-      "criteria": ["settings"]
+      "criteria": [
+        "settings"
+      ]
     },
     {
       "id": "verify-setting-exactly",
@@ -19,7 +27,9 @@
       "path": "config/application.txt",
       "assertion": "equals",
       "expected": "feature_enabled=true\n",
-      "criteria": ["settings"]
+      "criteria": [
+        "settings"
+      ]
     },
     {
       "id": "verify-setting-hash",
@@ -27,14 +37,28 @@
       "path": "config/application.txt",
       "assertion": "sha256",
       "expected": "4ec20fd70d9ed68b220f942bce7a2a1234a391c2bd8ccd8068e4ffd9113003d4",
-      "criteria": ["settings"]
+      "criteria": [
+        "settings"
+      ]
     },
     {
       "id": "verify-license",
       "type": "file",
       "path": "LICENSE",
       "assertion": "exists",
-      "criteria": ["license"]
+      "criteria": [
+        "license"
+      ]
+    },
+    {
+      "id": "required-setting",
+      "type": "file",
+      "path": "config.json",
+      "assertion": "jsonPointerExists",
+      "pointer": "/feature/enabled",
+      "criteria": [
+        "configuration"
+      ]
     }
   ]
 }

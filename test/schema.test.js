@@ -53,6 +53,16 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
   httpConfig.checks[0].maxBodyBytes = 1048577;
   assert.equal(validateConfig(httpConfig), false);
   assertValid(validateConfig, jsonPointerConfig, 'JSON Pointer file config');
+  jsonPointerConfig.checks[0] = { id: 'pointer-exists', type: 'file', path: 'data.json', assertion: 'jsonPointerExists', pointer: '/a~1b', criteria: ['json'] };
+  assertValid(validateConfig, jsonPointerConfig, 'JSON Pointer existence config');
+  jsonPointerConfig.checks[0].expected = null;
+  assert.equal(validateConfig(jsonPointerConfig), false);
+  delete jsonPointerConfig.checks[0].expected;
+  jsonPointerConfig.checks[0] = { id: 'pointer-exists', type: 'file', path: 'data.json', assertion: 'jsonPointerExists', pointer: '/a~1b', criteria: ['json'] };
+  assertValid(validateConfig, jsonPointerConfig, 'JSON Pointer existence config');
+  jsonPointerConfig.checks[0].expected = null;
+  assert.equal(validateConfig(jsonPointerConfig), false);
+  delete jsonPointerConfig.checks[0].expected;
   jsonPointerConfig.checks[0].pointer = '/bad~2escape';
   assert.equal(validateConfig(jsonPointerConfig), false);
   const invalid = { version: 2, criteria: [], checks: [] };
