@@ -114,6 +114,10 @@ function redactionValues(config) {
   return [...values].sort((a, b) => b.length - a.length);
 }
 
+function characterCount(value) {
+  return Array.from(value).length;
+}
+
 function redactString(value, values) {
   let text = String(value ?? '')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
@@ -545,7 +549,7 @@ function validate(config) {
     for (const field of ['stdoutContains', 'stderrContains']) {
       if (typeof check[field] === 'undefined') continue;
       if (checkType !== 'command') errors.push(`${at}.${field}: is supported only for command checks.`);
-      if (typeof check[field] !== 'string' || !check[field].length || check[field].length > 4096) errors.push(`${at}.${field}: must be a non-empty string of at most 4096 characters.`);
+      if (typeof check[field] !== 'string' || !check[field].length || characterCount(check[field]) > 4096) errors.push(`${at}.${field}: must be a non-empty string of at most 4096 characters.`);
     }
     if (typeof check.workingDirectory !== 'undefined') {
       if (checkType !== 'command') errors.push(`${at}.workingDirectory: is supported only for command checks.`);
@@ -557,7 +561,7 @@ function validate(config) {
     }
     if (typeof check.stdin !== 'undefined') {
       if (checkType !== 'command') errors.push(`${at}.stdin: is supported only for command checks.`);
-      if (typeof check.stdin !== 'string' || check.stdin.length > 65_536) errors.push(`${at}.stdin: must be a string of at most 65536 characters.`);
+      if (typeof check.stdin !== 'string' || characterCount(check.stdin) > 65_536) errors.push(`${at}.stdin: must be a string of at most 65536 characters.`);
     }
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
@@ -759,6 +763,11 @@ export async function main(argv = process.argv.slice(2)) {
     for (const check of config.checks) {
       const checkStarted = new Date().toISOString();
       const worktree = path.join(checkout, check.id);
+      const checkRedactions = [...new Set([
+        ...secretsToRedact,
+        check.stdoutContains,
+        check.stderrContains,
+      ].filter((value) => typeof value === 'string'))].sort((a, b) => b.length - a.length);
       const add = await runGit(repository, ['worktree', 'add', '--detach', '--quiet', worktree, commit]);
       if (add.code !== 0) {
         results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, status: 'unverified', error: add.stderr.trim() || 'Unable to create isolated verification worktree.', file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
@@ -852,7 +861,7 @@ export async function main(argv = process.argv.slice(2)) {
               : assertionUnverified ? 'unverified' : 'passed';
           }
         }
-        redactResult(result, secretsToRedact);
+        redactResult(result, checkRedactions);
         const mutation = await worktreeMutation(worktree, commit);
         if (mutation) {
           const outcome = result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed');
@@ -863,7 +872,7 @@ export async function main(argv = process.argv.slice(2)) {
           id: check.id,
           type: check.type ?? 'command',
           criteria: check.criteria,
-          command: ['file', 'http'].includes(check.type) ? undefined : redactString(check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, secretsToRedact),
+          command: ['file', 'http'].includes(check.type) ? undefined : redactString(check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, checkRedactions),
           status: result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed'),
           error: result.error,
           exitCode: result.code,
@@ -882,7 +891,7 @@ export async function main(argv = process.argv.slice(2)) {
           http: result.http,
         });
       } catch (error) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: check.command, status: 'unverified', error: redactString(error.message, secretsToRedact), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: redactString(check.command, checkRedactions), status: 'unverified', error: redactString(error.message, checkRedactions), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
       } finally {
         await runGit(repository, ['worktree', 'remove', '--force', worktree]);
       }

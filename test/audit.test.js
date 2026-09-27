@@ -179,6 +179,10 @@ test('command output substring assertions report pass, fail, and truncated uncer
   assert.doesNotMatch(JSON.stringify(checks.matching.outputAssertions), /OUT-NEEDLE|ERR-NEEDLE/);
   assert.doesNotMatch(JSON.stringify(checks.missing.outputAssertions), /NEVER-PRINTED/);
   assert.doesNotMatch(JSON.stringify(checks.truncated.outputAssertions), /EARLY-NEEDLE/);
+  assert.doesNotMatch(JSON.stringify(report), /OUT-NEEDLE|ERR-NEEDLE|NEVER-PRINTED|EARLY-NEEDLE/);
+  assert.match(checks.matching.stdout, /\[REDACTED\]/);
+  const evidence = await readFile(path.join(root, '.agent-done-check/evidence', report.runId, 'matching.stdout.txt'), 'utf8');
+  assert.doesNotMatch(evidence, /OUT-NEEDLE/);
   const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
   assert.match(markdown, /stdout substring assertion: not found in the captured, truncated output; result is unverified/);
   assert.ok(!markdown.includes('NEVER-PRINTED'));
@@ -193,6 +197,17 @@ test('command output substring assertions report pass, fail, and truncated uncer
   const invalid = await invoke(root, ['--validate']);
   assert.equal(invalid.code, 2);
   assert.match(invalid.stdout, /stdoutContains.*only for command checks/);
+  config.checks[0].type = 'command';
+  delete config.checks[0].path;
+  delete config.checks[0].assertion;
+  config.checks[0].stdoutContains = '🐈'.repeat(4096);
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  assert.equal((await invoke(root, ['--validate'])).code, 0);
+  config.checks[0].stdoutContains += '🐈';
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const tooLongAssertion = await invoke(root, ['--validate']);
+  assert.equal(tooLongAssertion.code, 2);
+  assert.match(tooLongAssertion.stdout, /stdoutContains/);
 });
 
 test('command working directories stay inside the isolated worktree', async (t) => {
@@ -319,10 +334,10 @@ test('command stdin supplies bounded text and defaults to empty EOF', async (t) 
   assert.match(report.checks[0].stdout, /fixture-consumed/);
   assert.match(report.checks[1].stdout, /empty-eof/);
 
-  config.checks[0].stdin = 'x'.repeat(65_536);
+  config.checks[0].stdin = '🐈'.repeat(65_536);
   await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
   assert.equal((await invoke(root, ['--validate'])).code, 0);
-  for (const stdin of ['x'.repeat(65_537), 7, null]) {
+  for (const stdin of ['🐈'.repeat(65_537), 7, null]) {
     config.checks[0].stdin = stdin;
     await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
     const invalid = await invoke(root, ['--validate']);

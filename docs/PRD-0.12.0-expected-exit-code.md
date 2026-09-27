@@ -1,6 +1,6 @@
 # PRD: Agent Done Check 0.12.0 — Expected command exit codes
 
-**Status:** Approved for implementation  
+**Status:** Complete
 **Target:** 0.12.0
 
 ## Summary

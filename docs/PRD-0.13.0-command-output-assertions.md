@@ -1,6 +1,6 @@
 # PRD: Agent Done Check 0.13.0 — Command output assertions
 
-**Status:** Approved for implementation  
+**Status:** Complete
 **Target:** 0.13.0
 
 ## Summary
@@ -10,7 +10,7 @@ Add optional stdout and stderr substring assertions to command checks, with expl
 ## Goals and acceptance criteria
 
 - Command checks accept optional non-empty `stdoutContains` and `stderrContains` strings, each at most 4096 characters.
-- Evaluate assertions against captured output before report redaction. Never include configured substring values in JSON, Markdown, SARIF, or JUnit output.
+- Evaluate assertions against captured output before report redaction. Redact configured substring values from captured stdout/stderr in JSON and evidence files; never include them in Markdown, SARIF, or JUnit output.
 - Report only nullable/matched boolean assertion evidence.
 - If a requested substring is found in captured output, that assertion matches, even if older output bytes were truncated.
 - If absent from complete output, the assertion fails. If absent from truncated output, the check is `unverified` because the runner cannot establish absence.

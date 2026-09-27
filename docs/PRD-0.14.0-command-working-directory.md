@@ -1,6 +1,6 @@
 # PRD: Agent Done Check 0.14.0 — Command working directories
 
-**Status:** Approved for implementation  
+**Status:** Complete
 **Target:** 0.14.0
 
 ## Summary

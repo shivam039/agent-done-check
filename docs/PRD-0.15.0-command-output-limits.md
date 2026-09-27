@@ -1,6 +1,6 @@
 # PRD: Agent Done Check 0.15.0 — Command output capture limits
 
-**Status:** Approved for implementation  
+**Status:** Complete
 **Target:** 0.15.0
 
 ## Summary

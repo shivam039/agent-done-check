@@ -86,7 +86,7 @@ PRD: [`docs/PRD-0.15.0-command-output-limits.md`](./docs/PRD-0.15.0-command-outp
 
 - Make the per-stream command output capture limit configurable within a strict bound.
 
-## Current release work: 0.16.0 — Command standard input
+## Completed: 0.16.0 — Command standard input
 
 PRD: [`docs/PRD-0.16.0-command-stdin.md`](./docs/PRD-0.16.0-command-stdin.md)
 

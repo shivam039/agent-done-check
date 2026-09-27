@@ -1,6 +1,6 @@
 # PRD: Agent Done Check 0.16.0 — Command standard input
 
-**Status:** Approved for implementation  
+**Status:** Complete
 **Target:** 0.16.0
 
 ## Summary
