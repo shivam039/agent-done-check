@@ -15,12 +15,14 @@ See the [changelog](./CHANGELOG.md) for release history.
 
 ## Install and run
 
-After an experimental 0.x npm release, install the CLI with `npm install --save-dev agent-done-check` and run `npx agent-done-check --config agent-done-check.json`. Until the first npm release is published, run it from a checkout:
+Install the CLI with `npm install --save-dev agent-done-check` and run `npx agent-done-check --config agent-done-check.json`. To run from a checkout:
 
 ```sh
 npm install
 node ./bin/agent-done-check.js --config agent-done-check.json
 ```
+
+Releases are published from GitHub Actions using npm Trusted Publishing (OIDC). Maintainers create a GitHub release for a `vX.Y.Z` tag that points to `main`; the publish workflow verifies the tag matches `package.json`, installs dependencies, runs the test suite, and publishes to npm without a stored npm token.
 
 To verify a specific revision, add `--commit <full-or-resolvable-revision>`. The default is `HEAD`. By default, the JSON report, Markdown report, and manifest are written under `.agent-done-check/`. Captured command output and browser screenshots are stored under `.agent-done-check/evidence/<run-id>/`. The `--output` and `--markdown-output` options can change the report paths.
 
