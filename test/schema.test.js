@@ -96,3 +96,32 @@ test('generated report and manifest conform; browser result shape is covered', a
   };
   assertValid(validateReport, browserReport, 'browser-shaped report');
 });
+
+
+test('HTTP report schema describes nullable match results while staying backward compatible', () => {
+  const originalHttp = {
+    url: 'https://example.invalid/health', expectedStatus: 200, statusCode: 200,
+    commitHeader: 'x-agent-done-check-commit', revisionBinding: 'verified',
+    bodyBytes: 0, bodySha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    bodyTruncated: false, bodyContainsMatched: null,
+  };
+  const report = {
+    schemaVersion: 4, tool: { name: 'agent-done-check', version: '0.21.0' }, runId: '00000000-0000-4000-8000-000000000000',
+    status: 'passed', repository: 'https://example.invalid/repo', commit: 'a'.repeat(40),
+    startedAt: '2026-09-27T00:00:00.000Z', completedAt: '2026-09-27T00:00:01.000Z',
+    reproducibility: { configPath: 'config.json', configSha256: 'a'.repeat(64), node: 'v22.0.0', platform: 'linux', arch: 'x64', locale: 'en', timezone: 'UTC' },
+    criteria: [], checks: [{ id: 'http-check', type: 'http', criteria: [], status: 'passed', startedAt: '2026-09-27T00:00:00.000Z', http: originalHttp }],
+  };
+  assertValid(validateReport, report, 'older v4 HTTP report');
+  report.checks[0].http.responseHeadersMatched = null;
+  report.checks[0].http.bodySha256Matched = null;
+  assertValid(validateReport, report, 'HTTP report without assertions');
+  report.checks[0].http.responseHeadersMatched = { 'x-mode': true };
+  report.checks[0].http.bodySha256Matched = true;
+  assertValid(validateReport, report, 'HTTP report with matching assertions');
+  report.checks[0].http.responseHeadersMatched = { 'x-mode': false };
+  report.checks[0].http.bodySha256Matched = false;
+  assertValid(validateReport, report, 'HTTP report with failed assertions');
+  report.checks[0].http.responseHeadersMatched = { 'bad name': true };
+  assert.equal(validateReport(report), false);
+});
