@@ -170,6 +170,8 @@ test('command checks pass only on their configured expected exit code', async (t
     checks: [
       { id: 'default-zero', command: nodeCommand('process.exit(0)'), criteria: ['exit-codes'] },
       { id: 'expected-seven', command: nodeCommand('process.exit(7)'), expectedExitCode: 7, criteria: ['exit-codes'] },
+      { id: 'expected-list-seven', command: nodeCommand('process.exit(7)'), expectedExitCodes: [3, 7], criteria: ['exit-codes'] },
+      { id: 'expected-list-three', command: nodeCommand('process.exit(3)'), expectedExitCodes: [3, 7], criteria: ['exit-codes'] },
       { id: 'unexpected-seven', command: nodeCommand('process.exit(7)'), expectedExitCode: 0, criteria: ['exit-codes'] },
     ],
   };
@@ -183,6 +185,10 @@ test('command checks pass only on their configured expected exit code', async (t
   assert.equal(checks['expected-seven'].exitCode, 7);
   assert.equal(checks['expected-seven'].expectedExitCode, 7);
   assert.equal(checks['expected-seven'].status, 'passed');
+  assert.equal(checks['expected-list-seven'].status, 'passed');
+  assert.equal(checks['expected-list-seven'].expectedExitCode, 3);
+  assert.deepEqual(checks['expected-list-seven'].expectedExitCodes, [3, 7]);
+  assert.equal(checks['expected-list-three'].status, 'passed');
   assert.equal(checks['unexpected-seven'].status, 'failed');
   assert.equal(checks['unexpected-seven'].exitCode, 7);
   config.checks[1].expectedExitCode = 256;
@@ -190,6 +196,23 @@ test('command checks pass only on their configured expected exit code', async (t
   const invalidCode = await invoke(root);
   assert.equal(invalidCode.code, 2);
   assert.match(invalidCode.stderr, /expectedExitCode/);
+  config.checks[1].expectedExitCode = undefined;
+  for (const codes of [[], [256], [-1], [0, 0], Array.from({ length: 33 }, (_, index) => index)]) {
+    config.checks[1].expectedExitCodes = codes;
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    assert.equal((await invoke(root, ['--validate'])).code, 2, JSON.stringify(codes));
+  }
+  config.checks[1].expectedExitCodes = [0, 7];
+  config.checks[1].expectedExitCode = 0;
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  assert.equal((await invoke(root, ['--validate'])).code, 2);
+  delete config.checks[1].expectedExitCode;
+  config.checks[1].expectedExitCodes = [0];
+  config.checks[1].type = 'file';
+  config.checks[1].path = 'x';
+  config.checks[1].assertion = 'exists';
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  assert.equal((await invoke(root, ['--validate'])).code, 2);
 });
 
 test('selected checks preserve config order and leave omitted criteria unverified', async (t) => {
@@ -806,7 +829,7 @@ test('timeout terminates descendant processes and marks the criterion unverified
   const marker = path.join(root, 'late-child.marker');
   const script = `const { spawn } = require('node:child_process'); spawn(process.execPath, ['-e', 'setTimeout(() => require("node:fs").writeFileSync(process.env.MARKER, "late"), 1800)']); setTimeout(() => {}, 10000);`;
   const command = nodeCommand(script);
-  const config = baseConfig({ command, timeoutMs: 1000 });
+  const config = baseConfig({ command, timeoutMs: 1000, expectedExitCodes: [124] });
   config.env = { MARKER: marker };
   await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
 

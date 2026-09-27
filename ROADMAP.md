@@ -152,10 +152,16 @@ PRD: [`docs/PRD-0.26.0-http-status-list.md`](./docs/PRD-0.26.0-http-status-list.
 
 - Accept a bounded list of exact HTTP response status codes per check.
 
-## Current release work: 0.27.0 — Shell-free argv commands
+## Completed: 0.27.0 — Shell-free argv commands
 
 PRD: [`docs/PRD-0.27.0-argv-commands.md`](./docs/PRD-0.27.0-argv-commands.md)
 
 - Let command checks pass program and arguments directly without a shell.
+
+## Current release work: 0.28.0 — Multiple expected command exit codes
+
+PRD: [`docs/PRD-0.28.0-command-exit-code-list.md`](./docs/PRD-0.28.0-command-exit-code-list.md)
+
+- Accept a bounded list of successful exit codes for command checks.
 
 ## Later

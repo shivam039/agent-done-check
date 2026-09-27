@@ -124,7 +124,7 @@ Pass `--junit-output <file>` during a normal audit to write one testcase per con
 
 ### Expected command exit code
 
-Command checks pass on exit code 0 by default. Set `expectedExitCode` on a command check to use a different integer from 0 through 255. A different completed exit code fails; a timeout remains unverified. The check result records the expected value. This option applies only to command checks.
+Command checks pass on exit code 0 by default. Set `expectedExitCode` on a command check to use a different integer from 0 through 255, or set `expectedExitCodes` to accept 1–32 distinct codes. The scalar and list options cannot be combined; timeouts remain unverified regardless of the list. Reports preserve `expectedExitCode` as the first accepted code and include the full `expectedExitCodes` list. These options apply only to command checks.
 
 ### Command output assertions
 

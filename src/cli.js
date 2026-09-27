@@ -656,6 +656,12 @@ function validate(config) {
       if (checkType !== 'command') errors.push(`${at}.expectedExitCode: is supported only for command checks.`);
       if (!Number.isInteger(check.expectedExitCode) || check.expectedExitCode < 0 || check.expectedExitCode > 255) errors.push(`${at}.expectedExitCode: must be an integer from 0 to 255.`);
     }
+    if (typeof check.expectedExitCodes !== 'undefined') {
+      if (checkType !== 'command') errors.push(`${at}.expectedExitCodes: is supported only for command checks.`);
+      if (typeof check.expectedExitCode !== 'undefined') errors.push(`${at}.expectedExitCodes: cannot be combined with expectedExitCode.`);
+      if (!Array.isArray(check.expectedExitCodes) || check.expectedExitCodes.length < 1 || check.expectedExitCodes.length > 32 || check.expectedExitCodes.some((code) => !Number.isInteger(code) || code < 0 || code > 255)) errors.push(`${at}.expectedExitCodes: must contain 1 to 32 integers from 0 to 255.`);
+      else if (new Set(check.expectedExitCodes).size !== check.expectedExitCodes.length) errors.push(`${at}.expectedExitCodes: codes must be unique.`);
+    }
     for (const field of ['stdoutContains', 'stderrContains']) {
       if (typeof check[field] === 'undefined') continue;
       if (checkType !== 'command') errors.push(`${at}.${field}: is supported only for command checks.`);
@@ -1030,10 +1036,12 @@ export async function main(argv = process.argv.slice(2)) {
           });
           result.maxOutputBytes = check.maxOutputBytes ?? MAX_OUTPUT;
           if (result.status === 'unverified' && result.error) {
-            result.expectedExitCode = check.expectedExitCode ?? 0;
+            result.expectedExitCodes = check.expectedExitCodes ?? [check.expectedExitCode ?? 0];
+            result.expectedExitCode = result.expectedExitCodes[0];
             result.outputAssertions = { stdoutContainsMatched: null, stderrContainsMatched: null };
           } else {
-          result.expectedExitCode = check.expectedExitCode ?? 0;
+          result.expectedExitCodes = check.expectedExitCodes ?? [check.expectedExitCode ?? 0];
+          result.expectedExitCode = result.expectedExitCodes[0];
           const stdoutContainsMatched = typeof check.stdoutContains === 'string' ? result.stdout.includes(check.stdoutContains) : null;
           const stderrContainsMatched = typeof check.stderrContains === 'string' ? result.stderr.includes(check.stderrContains) : null;
           result.outputAssertions = { stdoutContainsMatched, stderrContainsMatched };
@@ -1042,7 +1050,7 @@ export async function main(argv = process.argv.slice(2)) {
           const assertionUnverified = (stdoutContainsMatched === false && result.stdoutTruncated)
             || (stderrContainsMatched === false && result.stderrTruncated);
           result.status = result.signal === 'TIMEOUT' ? 'unverified'
-            : result.code !== result.expectedExitCode || assertionFailed ? 'failed'
+            : !result.expectedExitCodes.includes(result.code) || assertionFailed ? 'failed'
               : assertionUnverified ? 'unverified' : 'passed';
           }
         }
@@ -1061,7 +1069,8 @@ export async function main(argv = process.argv.slice(2)) {
           status: result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed'),
           error: result.error,
           exitCode: result.code,
-          expectedExitCode: (check.type ?? 'command') === 'command' ? check.expectedExitCode ?? 0 : undefined,
+          expectedExitCode: (check.type ?? 'command') === 'command' ? result.expectedExitCode ?? (check.expectedExitCodes?.[0] ?? check.expectedExitCode ?? 0) : undefined,
+          expectedExitCodes: (check.type ?? 'command') === 'command' ? result.expectedExitCodes ?? (check.expectedExitCodes ?? [check.expectedExitCode ?? 0]) : undefined,
           workingDirectory: (check.type ?? 'command') === 'command' ? check.workingDirectory ?? '.' : undefined,
           maxOutputBytes: (check.type ?? 'command') === 'command' ? result.maxOutputBytes ?? check.maxOutputBytes ?? MAX_OUTPUT : undefined,
           outputAssertions: result.outputAssertions,
