@@ -30,13 +30,19 @@ PRD: [`docs/PRD-0.6.0-commit-bound-file-checks.md`](./docs/PRD-0.6.0-commit-boun
 - Bind assertions to the requested commit's detached worktree and emit bounded hash metadata.
 - Keep report schema v2 available and version the current report shape as schema v3.
 
-## Current release work: 0.7.0 — Commit-bound HTTP checks
+## Completed: 0.7.0 — Commit-bound HTTP checks
 
 PRD: [`docs/PRD-0.7.0-commit-bound-http-checks.md`](./docs/PRD-0.7.0-commit-bound-http-checks.md)
 
 - Add read-only GET checks whose response must expose the exact requested commit SHA.
 - Bound response bodies and record only sanitized status and hash metadata.
 - Preserve report schemas v2 and v3 and introduce report schema v4.
+
+## Current release work: 0.8.0 — Offline config validation
+
+PRD: [`docs/PRD-0.8.0-offline-config-validation.md`](./docs/PRD-0.8.0-offline-config-validation.md)
+
+- Add a JSON-output validation mode that checks configs without running checks or requiring Git.
 
 ## Later
 

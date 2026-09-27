@@ -184,6 +184,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') options.help = true;
     else if (arg === '--version' || arg === '-v') options.version = true;
+    else if (arg === '--validate') options.validate = true;
     else if (['--config', '--commit', '--output', '--markdown-output'].includes(arg)) {
       if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error(`Expected a value after ${arg}`);
       options[arg.slice(2)] = argv[++i];
@@ -519,7 +520,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
 }
 
 function usage() {
-  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --help            Show this help\n  --version         Show version\n`;
+  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>]\n  agent-done-check --validate [--config <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --validate        Validate config and print JSON without running checks\n  --help            Show this help\n  --version         Show version\n`;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -537,10 +538,37 @@ export async function main(argv = process.argv.slice(2)) {
     if (contents.byteLength > MAX_CONFIG_BYTES) throw new Error(`Config ${configPath} exceeds the ${MAX_CONFIG_BYTES}-byte limit.`);
     configContents = contents.toString('utf8');
   }
-  catch (error) { throw new Error(`Cannot read config ${configPath}: ${error.message}`); }
+  catch (error) {
+    if (args.validate) {
+      console.log(JSON.stringify({ valid: false, configPath: path.relative(root, configPath), errors: [`Cannot read config: ${error.message}`] }));
+      process.exitCode = 2;
+      return;
+    }
+    throw new Error(`Cannot read config ${configPath}: ${error.message}`);
+  }
   let config;
   try { config = JSON.parse(configContents); }
-  catch (error) { throw new Error(`Invalid JSON in ${configPath}: ${error.message}`); }
+  catch (error) {
+    if (args.validate) {
+      console.log(JSON.stringify({ valid: false, configPath: path.relative(root, configPath), errors: [`Invalid JSON: ${error.message}`] }));
+      process.exitCode = 2;
+      return;
+    }
+    throw new Error(`Invalid JSON in ${configPath}: ${error.message}`);
+  }
+  if (args.validate) {
+    try {
+      validate(config);
+      console.log(JSON.stringify({ valid: true, configPath: path.relative(root, configPath), criterionCount: config.criteria.length, checkCount: config.checks.length }));
+    } catch (error) {
+      const errors = error.message.startsWith('Invalid verification config:\n')
+        ? error.message.split('\n').slice(1).map((line) => line.replace(/^\s*-\s*/, '')).filter(Boolean)
+        : [error.message];
+      console.log(JSON.stringify({ valid: false, configPath: path.relative(root, configPath), errors }));
+      process.exitCode = 2;
+    }
+    return;
+  }
   validate(config);
   const output = path.resolve(root, args.output ?? '.agent-done-check/report.json');
   const markdownOutput = path.resolve(root, args['markdown-output'] ?? path.join(path.dirname(output), 'report.md'));

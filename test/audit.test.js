@@ -522,3 +522,35 @@ test('HTTP checks require exact commit binding and keep response content out of 
   assert.ok(!JSON.stringify(report).includes('ghp_abcdefghijklmnopqrstuvwxyz123456789'));
   assert.ok(!JSON.stringify(report).includes('healthy'));
 });
+
+test('validation mode emits JSON offline and never runs configured checks', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'agent-done-check-validate-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const config = baseConfig({ command: "node -e \"require('node:fs').writeFileSync('should-not-run', 'yes')\"" });
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const invokeValidation = (filename = 'agent-done-check.json') => {
+    try {
+      const stdout = execFileSync(process.execPath, [cliPath, '--validate', '--config', filename], { cwd: root, encoding: 'utf8' });
+      return { code: 0, output: JSON.parse(stdout) };
+    } catch (error) {
+      return { code: error.status, output: JSON.parse(error.stdout.toString()) };
+    }
+  };
+  const valid = invokeValidation();
+  assert.equal(valid.code, 0);
+  assert.deepEqual(valid.output, { valid: true, configPath: 'agent-done-check.json', criterionCount: 1, checkCount: 1 });
+  await assert.rejects(readFile(path.join(root, 'should-not-run')));
+  await assert.rejects(readFile(path.join(root, '.agent-done-check/report.json')));
+
+  config.checks[0].command = '';
+  await writeFile(path.join(root, 'invalid.json'), JSON.stringify(config));
+  const invalid = invokeValidation('invalid.json');
+  assert.equal(invalid.code, 2);
+  assert.equal(invalid.output.valid, false);
+  assert.ok(invalid.output.errors.some((error) => error.includes('command')));
+
+  await writeFile(path.join(root, 'malformed.json'), '{not json');
+  const malformed = invokeValidation('malformed.json');
+  assert.equal(malformed.code, 2);
+  assert.match(malformed.output.errors[0], /^Invalid JSON:/);
+});

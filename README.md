@@ -103,3 +103,7 @@ The current JSON report schema is [schema v4](./schemas/report-v4.schema.json). 
 ### Commit-bound HTTP checks
 
 Use `type: "http"` for a read-only `GET` probe. The response must include the exact target commit SHA in `x-agent-done-check-commit` (or a configured `commitHeader`) before its status or optional UTF-8 `bodyContains` assertion can pass. Redirects are rejected, request headers and bodies cannot be configured, and response bodies are capped at 1 MiB. Reports contain a sanitized URL, HTTP status, revision-binding result, body byte count and SHA-256; response content and commit-header values are never recorded. Missing or mismatched commit evidence, timeouts, redirects, oversized bodies, and invalid UTF-8 are unverified. See [`agent-done-check.http.example.json`](./agent-done-check.http.example.json). Configs are trusted policy and can still probe any network address available to the host.
+
+### Validate a config without running it
+
+Run `node ./bin/agent-done-check.js --validate` to check `agent-done-check.json`, or pass `--config <file>` for another path. Validation works outside a Git repository and never executes configured checks. It prints one JSON object: valid results include `valid`, `configPath`, `criterionCount`, and `checkCount`; invalid results include `valid: false` and an `errors` array. The command exits 0 for valid input and 2 for invalid, unreadable, or malformed input.
