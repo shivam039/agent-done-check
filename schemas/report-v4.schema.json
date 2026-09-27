@@ -583,6 +583,11 @@
           "propertyNames": { "pattern": "^[!#$%&'*+.^_`|~0-9a-z-]+$" },
           "additionalProperties": { "type": "boolean" }
         },
+        "contentType": {
+          "type": ["string", "null"],
+          "maxLength": 256,
+          "pattern": "^[!#$%&'*+.^_`|~0-9a-z-]+/[!#$%&'*+.^_`|~0-9a-z-]+$"
+        },
         "contentTypeMatched": { "type": ["boolean", "null"] }
       },
       "additionalProperties": true

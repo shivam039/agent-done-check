@@ -176,10 +176,10 @@ PRD: [`docs/PRD-0.30.0-http-content-type.md`](./docs/PRD-0.30.0-http-content-typ
 
 - Assert the normalized response media type after commit binding and before reading its body.
 
-## Current release work: 0.31.0 — Bounded HTTP content-type assertion evidence
+## Completed: 0.31.0 — Normalized HTTP content-type evidence evidence
 
 PRD: [`docs/PRD-0.31.0-http-response-content-type.md`](./docs/PRD-0.31.0-http-response-content-type.md)
 
-- Record normalized response content type evidence without exposing parameters or header values.
+- Record a normalized media type after commit binding without exposing parameters.
 
 ## Later

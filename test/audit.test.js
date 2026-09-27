@@ -1260,7 +1260,7 @@ test('HTTP content type assertions normalize case and parameters before body rea
   const server = createServer((request, response) => {
     if (request.url === '/unbound') { response.setHeader('content-type', 'application/json'); response.end('ok'); return; }
     response.setHeader('x-agent-done-check-commit', targetCommit);
-    if (!['/missing', '/slow-missing'].includes(request.url)) response.setHeader('content-type', request.url === '/invalid' ? 'secret/value' : 'Application/JSON; charset=utf-8');
+    if (!['/missing', '/slow-missing'].includes(request.url)) response.setHeader('content-type', request.url === '/invalid' ? 'secret/value' : request.url === '/private-param' ? 'Application/JSON; secret=private-parameter' : 'Application/JSON; charset=utf-8');
     if (request.url === '/slow-missing') {
       response.writeHead(200);
       response.write(Buffer.alloc(4096, 97));
@@ -1276,7 +1276,7 @@ test('HTTP content type assertions normalize case and parameters before body rea
   const config = {
     version: 1,
     criteria: [{ id: 'content-type', description: 'Response media type matches.' }],
-    checks: ['/match', '/missing', '/slow-missing', '/unbound'].map((route) => ({
+    checks: ['/match', '/missing', '/slow-missing', '/unbound', '/invalid', '/private-param'].map((route) => ({
       id: route.slice(1), type: 'http', url: `http://127.0.0.1:${port}${route}`,
       expectedContentType: 'application/json', criteria: ['content-type'],
       ...(route === '/slow-missing' ? { expectedStatus: 200 } : {}),
@@ -1290,14 +1290,23 @@ test('HTTP content type assertions normalize case and parameters before body rea
   const checks = Object.fromEntries(result.report.checks.map((check) => [check.id, check]));
   assert.equal(checks.match.status, 'passed');
   assert.equal(checks.match.http.contentTypeMatched, true);
+  assert.equal(checks.match.http.contentType, 'application/json');
   assert.equal(checks.missing.status, 'failed');
   assert.equal(checks.missing.http.contentTypeMatched, false);
   assert.equal(checks['slow-missing'].status, 'failed', JSON.stringify(checks['slow-missing']));
   assert.equal(checks['slow-missing'].http.bodyBytes, null);
   assert.equal(checks.unbound.status, 'unverified');
   assert.equal(checks.unbound.http.contentTypeMatched, null);
+  assert.equal(checks.unbound.http.contentType, null);
+  assert.equal(checks.missing.http.contentType, null);
+  assert.equal(checks.invalid.http.contentType, 'secret/value');
+  assert.equal(checks['private-param'].http.contentType, 'application/json');
   assert.ok(!JSON.stringify(result.report).includes('Application/JSON'));
-  assert.ok(!JSON.stringify(result.report).includes('application/json'));
+  assert.equal((JSON.stringify(result.report).match(/application\/json/g) ?? []).length, 2);
+  assert.ok(!JSON.stringify(result.report).includes('private-parameter'));
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  assert.ok(markdown.includes('content type `application/json`'));
+  assert.ok(!markdown.includes('private-parameter'));
 
   const validate = async () => { await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config)); return invoke(root, ['--validate']); };
   config.checks[0].expectedContentType = 'application/json; charset=utf-8';
