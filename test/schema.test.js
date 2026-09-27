@@ -42,6 +42,14 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
   };
   const argvConfig = { version: 1, criteria: [{ id: 'argv', description: 'An executable receives exact arguments.' }], checks: [{ id: 'argv', command: ['node', '-e', 'process.exit(0)', 'a b'], criteria: ['argv'] }] };
   assertValid(validateConfig, argvConfig, 'argv command config');
+  argvConfig.checks[0].expectedExitCodes = [0, 7];
+  assertValid(validateConfig, argvConfig, 'multiple expected command exit codes');
+  argvConfig.checks[0].expectedExitCode = 0;
+  assert.equal(validateConfig(argvConfig), false);
+  delete argvConfig.checks[0].expectedExitCode;
+  argvConfig.checks[0].expectedExitCodes = [0, 0];
+  assert.equal(validateConfig(argvConfig), false);
+  delete argvConfig.checks[0].expectedExitCodes;
   argvConfig.checks[0].command = [];
   assert.equal(validateConfig(argvConfig), false);
   argvConfig.checks[0].command = ['node', 'x'.repeat(4097)];
