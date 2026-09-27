@@ -614,3 +614,35 @@ test('bundle verification works offline and rejects malformed or escaping manife
   assert.equal(malformed.code, 2);
   assert.equal(malformed.output.valid, false);
 });
+
+test('SARIF output maps non-passing checks, excludes captured output, and enters the manifest', async (t) => {
+  const root = await repository(t);
+  const config = {
+    version: 1,
+    criteria: [{ id: 'acceptance', description: 'Configured outcomes are reported.' }],
+    checks: [
+      { id: 'pass-check', command: 'node --version', criteria: ['acceptance'] },
+      { id: 'fail-check', command: nodeCommand("console.log('sarif-secret-output'); process.exit(1)"), criteria: ['acceptance'] },
+      { id: 'unverified-check', type: 'http', url: 'http://127.0.0.1:1/unavailable', criteria: ['acceptance'] },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root, ['--sarif-output', '.agent-done-check/results.sarif']);
+  assert.equal(result.code, 1, result.stderr || JSON.stringify(result.report?.checks));
+  const sarif = JSON.parse(await readFile(path.join(root, '.agent-done-check/results.sarif'), 'utf8'));
+  assert.equal(sarif.version, '2.1.0');
+  assert.equal(sarif.runs.length, 1);
+  const run = sarif.runs[0];
+  assert.equal(run.tool.driver.name, 'Agent Done Check');
+  assert.equal(run.properties.targetCommit, result.report.commit);
+  assert.deepEqual(run.results.map((item) => item.ruleId), ['fail-check', 'unverified-check']);
+  assert.deepEqual(run.results.map((item) => item.level), ['error', 'warning']);
+  assert.ok(!JSON.stringify(sarif).includes('sarif-secret-output'));
+  assert.ok(!JSON.stringify(sarif).includes('stdout'));
+  const manifest = JSON.parse(await readFile(path.join(root, '.agent-done-check/manifest.json'), 'utf8'));
+  const artifact = manifest.artifacts.find((item) => item.role === 'sarif-report');
+  assert.ok(artifact);
+  assert.equal(artifact.sha256, createHash('sha256').update(await readFile(path.join(root, '.agent-done-check/results.sarif'))).digest('hex'));
+  const verified = invokeBundle(root, path.join(root, '.agent-done-check/manifest.json'));
+  assert.equal(verified.code, 0, JSON.stringify(verified.output));
+});

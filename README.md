@@ -111,3 +111,7 @@ Run `node ./bin/agent-done-check.js --validate` to check `agent-done-check.json`
 ### Verify an existing report bundle
 
 Run `node ./bin/agent-done-check.js --verify-bundle` to check `.agent-done-check/manifest.json`, or use `--manifest <file>` to select another manifest. The command verifies the report identity, each listed file's byte count and SHA-256, and keeps resolved artifact paths inside the manifest directory. It works outside a Git repository and never reruns checks. Exit status is 0 for a valid bundle, 1 for missing or inconsistent artifacts, and 2 for an unreadable or malformed manifest. A matching unsigned manifest proves internal consistency, not authorship or authenticity.
+
+### Export SARIF
+
+Pass `--sarif-output <file>` during a normal audit to write a SARIF 2.1.0 log. Failed checks appear as `error` results and unverified checks as `warning`; passed checks are omitted. SARIF messages include only the check ID and status, not captured command output or arbitrary check errors. The SARIF file is included in the evidence manifest. See the [OASIS SARIF 2.1.0 specification](https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html).

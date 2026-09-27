@@ -269,7 +269,7 @@ function parseArgs(argv) {
     else if (arg === '--version' || arg === '-v') options.version = true;
     else if (arg === '--validate') options.validate = true;
     else if (arg === '--verify-bundle') options.verifyBundle = true;
-    else if (['--config', '--commit', '--output', '--markdown-output', '--manifest'].includes(arg)) {
+    else if (['--config', '--commit', '--output', '--markdown-output', '--manifest', '--sarif-output'].includes(arg)) {
       if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error(`Expected a value after ${arg}`);
       options[arg.slice(2)] = argv[++i];
     } else throw new Error(`Unknown argument: ${arg}`);
@@ -447,6 +447,22 @@ function unavailableHttpResult(check) {
     bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null };
 }
 
+function sarifReport(report) {
+  const findings = report.checks.filter((check) => check.status !== 'passed');
+  const rules = findings.map((check) => ({ id: check.id, shortDescription: { text: 'Configured acceptance check' } }));
+  const ruleIndexes = new Map(rules.map((rule, index) => [rule.id, index]));
+  return {
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json', version: '2.1.0',
+    runs: [{
+      tool: { driver: { name: 'Agent Done Check', version: VERSION, informationUri: 'https://github.com/shivam039/agent-done-check', rules } },
+      results: findings.map((check) => ({ ruleId: check.id, ruleIndex: ruleIndexes.get(check.id), level: check.status === 'failed' ? 'error' : 'warning',
+        message: { text: `Check ${check.id} ${check.status}.` },
+        properties: { checkId: check.id, criteria: check.criteria, status: check.status, targetCommit: report.commit } })),
+      properties: { targetCommit: report.commit, runId: report.runId },
+    }],
+  };
+}
+
 function validate(config) {
   const errors = [];
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Config must be a JSON object.');
@@ -605,7 +621,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
 }
 
 function usage() {
-  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>]\n  agent-done-check --validate [--config <file>]\n  agent-done-check --verify-bundle [--manifest <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --validate        Validate config and print JSON without running checks\n  --verify-bundle   Verify manifest and artifact integrity without rerunning checks\n  --manifest        Manifest path (default: .agent-done-check/manifest.json)\n  --help            Show this help\n  --version         Show version\n`;
+  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>] [--sarif-output <file>]\n  agent-done-check --validate [--config <file>]\n  agent-done-check --verify-bundle [--manifest <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --sarif-output    Optional SARIF 2.1.0 output path\n  --validate        Validate config and print JSON without running checks\n  --verify-bundle   Verify manifest and artifact integrity without rerunning checks\n  --manifest        Manifest path (default: .agent-done-check/manifest.json)\n  --help            Show this help\n  --version         Show version\n`;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -664,8 +680,10 @@ export async function main(argv = process.argv.slice(2)) {
   const output = path.resolve(root, args.output ?? '.agent-done-check/report.json');
   const markdownOutput = path.resolve(root, args['markdown-output'] ?? path.join(path.dirname(output), 'report.md'));
   const manifestPath = path.join(path.dirname(output), 'manifest.json');
-  if (new Set([output, markdownOutput, manifestPath, configPath]).size !== 4) {
-    throw new Error('JSON report, Markdown report, manifest, and config must use distinct paths.');
+  const sarifOutput = args['sarif-output'] ? path.resolve(root, args['sarif-output']) : undefined;
+  const destinations = [output, markdownOutput, manifestPath, configPath, ...(sarifOutput ? [sarifOutput] : [])];
+  if (new Set(destinations).size !== destinations.length) {
+    throw new Error('JSON report, Markdown report, SARIF report, manifest, and config must use distinct paths.');
   }
   const repository = await git(root, 'rev-parse', '--show-toplevel');
   const requested = args.commit ?? 'HEAD';
@@ -845,6 +863,10 @@ export async function main(argv = process.argv.slice(2)) {
     }
     await writeAtomic(output, `${JSON.stringify(report, null, 2)}\n`, runId);
     await writeAtomic(markdownOutput, markdownReport({ ...report, markdownPath: markdownOutput }, evidenceFiles, manifestPath), runId);
+    if (sarifOutput) {
+      await mkdir(path.dirname(sarifOutput), { recursive: true });
+      await writeAtomic(sarifOutput, `${JSON.stringify(sarifReport(report), null, 2)}\n`, runId);
+    }
     const reportBytes = await readFile(output);
     const markdownBytes = await readFile(markdownOutput);
     const manifest = {
@@ -855,6 +877,7 @@ export async function main(argv = process.argv.slice(2)) {
       artifacts: [
         { role: 'json-report', path: portablePath(path.relative(path.dirname(output), output)), sha256: sha256(reportBytes), bytes: reportBytes.byteLength, mediaType: 'application/json' },
         { role: 'markdown-report', path: portablePath(path.relative(path.dirname(output), markdownOutput)), sha256: sha256(markdownBytes), bytes: markdownBytes.byteLength, mediaType: 'text/markdown' },
+        ...(sarifOutput ? [{ role: 'sarif-report', path: portablePath(path.relative(path.dirname(output), sarifOutput)), sha256: sha256(await readFile(sarifOutput)), bytes: (await stat(sarifOutput)).size, mediaType: 'application/sarif+json' }] : []),
         ...evidenceFiles.map((item) => ({
           role: item.stream,
           ...item,

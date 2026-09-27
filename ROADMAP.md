@@ -44,11 +44,17 @@ PRD: [`docs/PRD-0.8.0-offline-config-validation.md`](./docs/PRD-0.8.0-offline-co
 
 - Add a JSON-output validation mode that checks configs without running checks or requiring Git.
 
-## Current release work: 0.9.0 — Report bundle verification
+## Completed: 0.9.0 — Report bundle verification
 
 PRD: [`docs/PRD-0.9.0-report-bundle-verification.md`](./docs/PRD-0.9.0-report-bundle-verification.md)
 
 - Verify manifest paths, byte counts, hashes, and report identity without rerunning checks.
+
+## Current release work: 0.10.0 — SARIF export
+
+PRD: [`docs/PRD-0.10.0-sarif-export.md`](./docs/PRD-0.10.0-sarif-export.md)
+
+- Export failed and unverified checks as SARIF 2.1.0 and include it in the bundle manifest.
 
 ## Later
 
