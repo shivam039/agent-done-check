@@ -477,7 +477,8 @@ async function runHttpCheck(commit, check, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const maxBodyBytes = check.maxBodyBytes ?? MAX_HTTP_BODY_BYTES;
-  const evidence = { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null, maxBodyBytes,
+  const expectedStatuses = check.expectedStatuses ?? [check.expectedStatus ?? 200];
+  const evidence = { url: displayUrl(check.url), expectedStatus: expectedStatuses[0], expectedStatuses, statusCode: null, maxBodyBytes,
     commitHeader, revisionBinding: 'missing', bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null,
     responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
   try {
@@ -530,7 +531,7 @@ async function runHttpCheck(commit, check, timeoutMs) {
       }
     }
     if (typeof check.bodySha256 === 'string') evidence.bodySha256Matched = evidence.bodySha256 === check.bodySha256;
-    const matched = response.status === evidence.expectedStatus && evidence.bodyContainsMatched !== false && evidence.bodySha256Matched !== false && evidence.bodyJsonPointerMatched !== false;
+    const matched = expectedStatuses.includes(response.status) && evidence.bodyContainsMatched !== false && evidence.bodySha256Matched !== false && evidence.bodyJsonPointerMatched !== false;
     return { status: matched ? 'passed' : 'failed', error: matched ? undefined : 'The bound HTTP response did not satisfy the configured assertion.', http: evidence };
   } catch {
     return { status: 'unverified', error: controller.signal.aborted ? 'The HTTP request timed out.' : 'The HTTP request could not be completed safely.', http: evidence };
@@ -538,7 +539,8 @@ async function runHttpCheck(commit, check, timeoutMs) {
 }
 
 function unavailableHttpResult(check) {
-  return { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null, maxBodyBytes: check.maxBodyBytes ?? MAX_HTTP_BODY_BYTES,
+  const expectedStatuses = check.expectedStatuses ?? [check.expectedStatus ?? 200];
+  return { url: displayUrl(check.url), expectedStatus: expectedStatuses[0], expectedStatuses, statusCode: null, maxBodyBytes: check.maxBodyBytes ?? MAX_HTTP_BODY_BYTES,
     commitHeader: (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase(), revisionBinding: 'missing',
     bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
 }
@@ -681,6 +683,7 @@ function validate(config) {
     if (typeof check.bodySha256 !== 'undefined' && checkType !== 'http') errors.push(`${at}.bodySha256: is supported only for HTTP checks.`);
     if (typeof check.bodyJsonPointerEquals !== 'undefined' && checkType !== 'http') errors.push(`${at}.bodyJsonPointerEquals: is supported only for HTTP checks.`);
     if (typeof check.maxBodyBytes !== 'undefined' && checkType !== 'http') errors.push(`${at}.maxBodyBytes: is supported only for HTTP checks.`);
+    if (typeof check.expectedStatuses !== 'undefined' && checkType !== 'http') errors.push(`${at}.expectedStatuses: is supported only for HTTP checks.`);
     if (typeof check.pointer !== 'undefined' && (checkType !== 'file' || !['jsonPointerEquals', 'jsonPointerExists'].includes(check.assertion))) errors.push(`${at}.pointer: is supported only with JSON Pointer file assertions.`);
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
@@ -699,6 +702,11 @@ function validate(config) {
       try { parsed = new URL(check.url); } catch { /* Report below. */ }
       if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) errors.push(`${at}.url: must be an absolute HTTP(S) URL without embedded credentials.`);
       if (typeof check.expectedStatus !== 'undefined' && (!Number.isInteger(check.expectedStatus) || check.expectedStatus < 100 || check.expectedStatus > 599)) errors.push(`${at}.expectedStatus: must be an HTTP status integer from 100 to 599.`);
+      if (typeof check.expectedStatuses !== 'undefined') {
+        if (typeof check.expectedStatus !== 'undefined') errors.push(`${at}.expectedStatuses: cannot be combined with expectedStatus.`);
+        if (!Array.isArray(check.expectedStatuses) || check.expectedStatuses.length < 1 || check.expectedStatuses.length > 20 || check.expectedStatuses.some((status) => !Number.isInteger(status) || status < 100 || status > 599)) errors.push(`${at}.expectedStatuses: must contain 1 to 20 HTTP status integers from 100 to 599.`);
+        else if (new Set(check.expectedStatuses).size !== check.expectedStatuses.length) errors.push(`${at}.expectedStatuses: status codes must be unique.`);
+      }
       if (typeof check.commitHeader !== 'undefined' && (typeof check.commitHeader !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(check.commitHeader))) errors.push(`${at}.commitHeader: must be a valid HTTP header name.`);
       if (typeof check.bodyContains !== 'undefined' && typeof check.bodyContains !== 'string') errors.push(`${at}.bodyContains: must be a string.`);
       if (typeof check.maxBodyBytes !== 'undefined' && (!Number.isInteger(check.maxBodyBytes) || check.maxBodyBytes < 1 || check.maxBodyBytes > MAX_HTTP_BODY_BYTES)) errors.push(`${at}.maxBodyBytes: must be an integer from 1 to ${MAX_HTTP_BODY_BYTES} bytes.`);
@@ -823,7 +831,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
       const headerAssertions = check.http.responseHeadersMatched
         ? Object.entries(check.http.responseHeadersMatched).map(([name, matched]) => `${name} ${matched ? 'matched' : 'did not match'}`).join(', ')
         : '';
-      lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; commit binding ${check.http.revisionBinding}${headerAssertions ? `; response headers ${headerAssertions}` : ''}${check.http.bodySha256Matched === true ? '; body SHA-256 matched' : check.http.bodySha256Matched === false ? '; body SHA-256 did not match' : ''}${check.http.bodyJsonPointerMatched === true ? '; JSON Pointer matched' : check.http.bodyJsonPointerMatched === false ? '; JSON Pointer did not match' : ''}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
+      lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; expected ${check.http.expectedStatuses.join(' or ')}; commit binding ${check.http.revisionBinding}${headerAssertions ? `; response headers ${headerAssertions}` : ''}${check.http.bodySha256Matched === true ? '; body SHA-256 matched' : check.http.bodySha256Matched === false ? '; body SHA-256 did not match' : ''}${check.http.bodyJsonPointerMatched === true ? '; JSON Pointer matched' : check.http.bodyJsonPointerMatched === false ? '; JSON Pointer did not match' : ''}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
     }
     if (check.browser?.diagnostics) {
       const diagnostics = check.browser.diagnostics;

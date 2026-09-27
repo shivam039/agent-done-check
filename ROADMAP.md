@@ -140,10 +140,16 @@ PRD: [`docs/PRD-0.24.0-json-pointer-exists.md`](./docs/PRD-0.24.0-json-pointer-e
 
 - Check that a JSON Pointer resolves in a committed JSON file without matching its value.
 
-## Current release work: 0.25.0 — HTTP JSON Pointer assertions
+## Completed: 0.25.0 — HTTP JSON Pointer assertions
 
 PRD: [`docs/PRD-0.25.0-http-json-pointer.md`](./docs/PRD-0.25.0-http-json-pointer.md)
 
 - Compare a typed JSON value at an RFC 6901 pointer in a bound HTTP response.
+
+## Current release work: 0.26.0 — Multiple acceptable HTTP statuses
+
+PRD: [`docs/PRD-0.26.0-http-status-list.md`](./docs/PRD-0.26.0-http-status-list.md)
+
+- Accept a bounded list of exact HTTP response status codes per check.
 
 ## Later
