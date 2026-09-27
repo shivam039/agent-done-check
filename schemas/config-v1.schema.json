@@ -312,6 +312,7 @@
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$" }
         },
+        "expectedContentType": { "type": "string", "minLength": 3, "maxLength": 256, "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+/[!#$%&'*+.^_`|~0-9A-Za-z-]+$" },
         "browser": {
           "enum": [
             "chromium",

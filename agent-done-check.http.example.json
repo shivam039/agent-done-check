@@ -18,6 +18,7 @@
       ],
       "maxBodyBytes": 65536,
       "requiredResponseHeaders": ["content-type"],
+      "expectedContentType": "application/json",
       "expectedStatuses": [
         200,
         201
