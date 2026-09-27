@@ -44,9 +44,14 @@
       "$ref": "#/$defs/status"
     },
     "checkSelection": {
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "uniqueItems": true,
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "repository": {
       "type": "string"
@@ -130,7 +135,9 @@
           },
           "unrunChecks": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": true
@@ -515,6 +522,24 @@
           "type": "boolean"
         },
         "bodyContainsMatched": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "responseHeadersMatched": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "propertyNames": {
+            "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "bodySha256Matched": {
           "type": [
             "boolean",
             "null"

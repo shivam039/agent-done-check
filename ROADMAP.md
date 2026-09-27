@@ -116,10 +116,16 @@ PRD: [`docs/PRD-0.20.0-json-pointer-file-checks.md`](./docs/PRD-0.20.0-json-poin
 
 - Compare typed JSON values at RFC 6901 pointers in committed files.
 
-## Current release work: 0.21.0 — HTTP response body digest assertions
+## Completed: 0.21.0 — HTTP response body digest assertions
 
 PRD: [`docs/PRD-0.21.0-http-body-digest.md`](./docs/PRD-0.21.0-http-body-digest.md)
 
 - Verify bounded raw HTTP response bytes by SHA-256 after commit binding.
+
+## Current release work: 0.22.0 — HTTP report schema alignment
+
+PRD: [`docs/PRD-0.22.0-http-report-schema.md`](./docs/PRD-0.22.0-http-report-schema.md)
+
+- Describe HTTP header and body digest match evidence in report schema v4.
 
 ## Later
