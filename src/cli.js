@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, mkdir, writeFile, rm, rename, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, mkdir, writeFile, rm, rename, stat, lstat, realpath, open } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -11,6 +11,7 @@ const VERSION = require('../package.json').version;
 const MAX_OUTPUT = 24_000;
 const MAX_TIMEOUT = 1_800_000;
 const MAX_CONFIG_BYTES = 1_048_576;
+const MAX_FILE_CHECK_BYTES = 1_048_576;
 const MAX_VIEWPORT_PIXELS = 16_000_000;
 const MAX_CRITERIA = 500;
 const MAX_CHECKS = 100;
@@ -257,6 +258,73 @@ async function worktreeMutation(cwd, expectedCommit) {
   return null;
 }
 
+function isWithinDirectory(directory, candidate) {
+  const relative = path.relative(directory, candidate);
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+async function runFileCheck(worktree, check) {
+  const base = await realpath(worktree);
+  const parts = check.path.split(/[\\/]/);
+  let current = base;
+  let info;
+  for (const part of parts) {
+    current = path.join(current, part);
+    try { info = await lstat(current); }
+    catch (error) {
+      if (error.code === 'ENOENT') {
+        return { status: check.assertion === 'exists' ? 'failed' : 'failed', error: 'The requested file does not exist.', file: { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } };
+      }
+      return { status: 'unverified', error: 'The requested file could not be inspected.', file: { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } };
+    }
+    const resolved = await realpath(current).catch(() => null);
+    if (!resolved || !isWithinDirectory(base, resolved)) {
+      return { status: 'unverified', error: 'The requested path resolves outside the verified worktree.', file: { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } };
+    }
+    current = resolved;
+  }
+  const file = { path: check.path, assertion: check.assertion, exists: true, bytes: null, sha256: null, matched: false };
+  if (!info?.isFile() && !(await stat(current).then((value) => value.isFile()).catch(() => false))) {
+    return { status: 'unverified', error: 'The requested path is not a regular file.', file };
+  }
+  let fileInfo;
+  try { fileInfo = await stat(current); }
+  catch { return { status: 'unverified', error: 'The requested file could not be inspected.', file }; }
+  if (!fileInfo.isFile()) return { status: 'unverified', error: 'The requested path is not a regular file.', file };
+  file.bytes = fileInfo.size;
+  if (fileInfo.size > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: `The requested file exceeds the ${MAX_FILE_CHECK_BYTES}-byte limit.`, file };
+  let bytes;
+  let handle;
+  try {
+    handle = await open(current, 'r');
+    fileInfo = await handle.stat();
+    if (!fileInfo.isFile()) return { status: 'unverified', error: 'The requested path is not a regular file.', file };
+    file.bytes = fileInfo.size;
+    if (fileInfo.size > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: `The requested file exceeds the ${MAX_FILE_CHECK_BYTES}-byte limit.`, file };
+    const buffer = Buffer.alloc(MAX_FILE_CHECK_BYTES + 1);
+    let offset = 0;
+    while (offset < buffer.byteLength) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    if (offset > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: `The requested file exceeds the ${MAX_FILE_CHECK_BYTES}-byte limit.`, file };
+    bytes = buffer.subarray(0, offset);
+  } catch { return { status: 'unverified', error: 'The requested file could not be read.', file }; }
+  finally { await handle?.close().catch(() => {}); }
+  file.bytes = bytes.byteLength;
+  file.sha256 = sha256(bytes);
+  if (check.assertion === 'exists') file.matched = true;
+  else if (check.assertion === 'sha256') file.matched = file.sha256 === check.expected;
+  else {
+    let contents;
+    try { contents = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
+    catch { return { status: 'unverified', error: 'Text assertions require valid UTF-8 content.', file }; }
+    file.matched = check.assertion === 'equals' ? contents === check.expected : contents.includes(check.expected);
+  }
+  return { status: file.matched ? 'passed' : 'failed', error: file.matched ? undefined : 'The file did not satisfy the configured assertion.', file };
+}
+
 function validate(config) {
   const errors = [];
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Config must be a JSON object.');
@@ -303,8 +371,15 @@ function validate(config) {
     else if (checkIds.has(check.id)) errors.push(`${at}.id: duplicate check id "${check.id}".`);
     else checkIds.add(check.id);
     const checkType = check.type ?? 'command';
-    if (!['command', 'playwright'].includes(checkType)) errors.push(`${at}.type: expected "command" or "playwright".`);
+    if (!['command', 'playwright', 'file'].includes(checkType)) errors.push(`${at}.type: expected "command", "playwright", or "file".`);
     if (checkType === 'command' && (typeof check.command !== 'string' || !check.command.trim())) errors.push(`${at}.command: must be a non-empty string.`);
+    if (checkType === 'file') {
+      if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..')) errors.push(`${at}.path: must be a non-empty relative path inside the verified worktree.`);
+      if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
+      if (['equals', 'contains', 'sha256'].includes(check.assertion) && typeof check.expected !== 'string') errors.push(`${at}.expected: must be a string for ${check.assertion}.`);
+      if (check.assertion === 'sha256' && typeof check.expected === 'string' && !/^[a-f0-9]{64}$/.test(check.expected)) errors.push(`${at}.expected: sha256 requires a 64-character lowercase hexadecimal digest.`);
+      if (check.assertion === 'exists' && typeof check.expected !== 'undefined') errors.push(`${at}.expected: is not used with the exists assertion.`);
+    }
     if (checkType === 'playwright') {
       let validUrl = false;
       if (typeof check.url === 'string') {
@@ -382,6 +457,10 @@ function markdownReport(report, evidenceFiles, manifestPath) {
     if (check.browser?.revisionBinding) {
       lines.push('', `Target commit binding: ${markdownText(check.browser.revisionBinding.status)}.`);
     }
+    if (check.file) {
+      const outcome = check.file.matched ? 'matched' : check.status === 'failed' ? 'did not match' : 'could not be verified';
+      lines.push('', `File assertion: ${markdownCode(check.file.assertion)} on ${markdownCode(check.file.path)} — ${outcome}${check.file.sha256 ? `; SHA-256 ${markdownCode(check.file.sha256)}` : ''}${check.file.bytes != null ? `; ${check.file.bytes} bytes` : ''}.`);
+    }
     if (check.browser?.diagnostics) {
       const diagnostics = check.browser.diagnostics;
       const dropped = Object.values(diagnostics.dropped ?? {}).reduce((sum, count) => sum + count, 0);
@@ -442,7 +521,7 @@ export async function main(argv = process.argv.slice(2)) {
       const worktree = path.join(checkout, check.id);
       const add = await runGit(repository, ['worktree', 'add', '--detach', '--quiet', worktree, commit]);
       if (add.code !== 0) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, status: 'unverified', error: add.stderr.trim() || 'Unable to create isolated verification worktree.', startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, status: 'unverified', error: add.stderr.trim() || 'Unable to create isolated verification worktree.', file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, startedAt: checkStarted });
         console.log(`UNVERIFIED ${check.id}`);
         continue;
       }
@@ -450,7 +529,9 @@ export async function main(argv = process.argv.slice(2)) {
       try {
         const timeoutMs = check.timeoutMs ?? config.timeoutMs ?? 120000;
         const deadline = Date.now() + timeoutMs;
-        if ((check.type ?? 'command') === 'playwright') {
+        if (check.type === 'file') {
+          result = await runFileCheck(worktree, check);
+        } else if ((check.type ?? 'command') === 'playwright') {
           let setupResult = { code: 0, stdout: '', stderr: '' };
           let setupTimeMs = 0;
           if (check.setupCommand) {
@@ -507,7 +588,7 @@ export async function main(argv = process.argv.slice(2)) {
           id: check.id,
           type: check.type ?? 'command',
           criteria: check.criteria,
-          command: redactString(check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, secretsToRedact),
+          command: check.type === 'file' ? undefined : redactString(check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, secretsToRedact),
           status: result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed'),
           error: result.error,
           exitCode: result.code,
@@ -518,9 +599,10 @@ export async function main(argv = process.argv.slice(2)) {
           stderr: result.stderr,
           outputTruncated: { stdout: result.stdoutTruncated, stderr: result.stderrTruncated },
           browser: result.browser,
+          file: result.file ?? (check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined),
         });
       } catch (error) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: check.command, status: 'unverified', error: redactString(error.message, secretsToRedact), startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: check.command, status: 'unverified', error: redactString(error.message, secretsToRedact), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, startedAt: checkStarted });
       } finally {
         await runGit(repository, ['worktree', 'remove', '--force', worktree]);
       }
@@ -537,7 +619,7 @@ export async function main(argv = process.argv.slice(2)) {
     const status = criteria.some((item) => item.status === 'failed') ? 'failed'
       : criteria.some((item) => item.status === 'unverified') ? 'unverified' : 'passed';
     const report = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       tool: { name: 'agent-done-check', version: VERSION },
       runId,
       status,

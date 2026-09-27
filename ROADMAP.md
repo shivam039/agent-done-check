@@ -14,13 +14,21 @@ Implemented:
 
 Redaction is best-effort. It cannot reliably identify transformed secrets or data in screenshots. Checks remain unsandboxed and run with the host user's privileges; do not run untrusted verification configs or grant untrusted code access to sensitive variables.
 
-## Current release work: 0.5.0 — Stable integration contract
+## Completed: 0.5.0 — Stable integration contract
 
 PRD: [`docs/PRD-0.5.0-stable-integration-contract.md`](./docs/PRD-0.5.0-stable-integration-contract.md)
 
 - Publish JSON Schemas for config v1, report schema v2, and manifest schema v1.
 - Document pre-1.0 compatibility, deprecation, and migration policy.
 - Validate examples and generated report/manifest output against the schemas in tests.
+
+## Current release work: 0.6.0 — Commit-bound file checks
+
+PRD: [`docs/PRD-0.6.0-commit-bound-file-checks.md`](./docs/PRD-0.6.0-commit-bound-file-checks.md)
+
+- Add static file assertions for existence, exact UTF-8 text, contained text, or SHA-256.
+- Bind assertions to the requested commit's detached worktree and emit bounded hash metadata.
+- Keep report schema v2 available and version the current report shape as schema v3.
 
 ## Later
 

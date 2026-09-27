@@ -1,6 +1,6 @@
 # Compatibility and migration policy
 
-Agent Done Check is pre-1.0. Its current contracts are configuration `version: 1`, JSON report `schemaVersion: 2`, and manifest `schemaVersion: 1`. The schemas for these contracts live in [`schemas/`](../schemas/).
+Agent Done Check is pre-1.0. Its current contracts are configuration `version: 1`, JSON report `schemaVersion: 3`, and manifest `schemaVersion: 1`. The previous report `schemaVersion: 2` remains documented by its versioned schema. The schemas for these contracts live in [`schemas/`](../schemas/).
 
 ## Version markers
 
@@ -20,6 +20,8 @@ The project may add optional config properties with safe defaults, add optional 
 A change is breaking if it removes a documented property, changes a property's type or meaning, changes a config default in a way that alters check execution or results, rejects previously valid documented input, changes status semantics, or changes artifact hash/path interpretation. Breaking changes require a new applicable contract version and updated schema. The CLI will continue supporting the previous contract for at least one minor release after a deprecation notice, unless a security issue requires faster removal.
 
 Before 1.0, breaking changes may be made with explicit migration notes and the appropriate marker/schema increment. The maintainers will document affected fields, old and new behavior, upgrade steps, and the first release that removes deprecated behavior. No compatibility guarantee beyond this published policy is implied by the 0.x package version.
+
+Report schema v3 adds the `file` check type and its result metadata. Consumers that validate reports against v2 should continue using the v2 schema for v2 reports; v3 reports use the v3 schema. Config remains version 1 because the file check is an additive check type with an explicit discriminator.
 
 After 1.0, package releases will follow semantic versioning: breaking public API or contract changes require a major package version; compatible additions use a minor version; fixes that do not change documented behavior use a patch version. Contract markers and schemas remain independently versioned and increment when their contract changes.
 

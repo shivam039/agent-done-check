@@ -90,6 +90,12 @@ See [`ROADMAP.md`](./ROADMAP.md) for implemented capabilities and planned work. 
 
 ## Integration contracts
 
-JSON Schemas are published in [`schemas/`](./schemas/): [config v1](./schemas/config-v1.schema.json), [report schema v2](./schemas/report-v2.schema.json), and [manifest schema v1](./schemas/manifest-v1.schema.json). Config `version` identifies the input format; report and manifest `schemaVersion` identify their respective output formats. Use the matching schema to validate integrations. The schemas accept additional properties so consumers can tolerate compatible additions.
+JSON Schemas are published in [`schemas/`](./schemas/): [config v1](./schemas/config-v1.schema.json), [current report schema v3](./schemas/report-v3.schema.json), [previous report schema v2](./schemas/report-v2.schema.json), and [manifest schema v1](./schemas/manifest-v1.schema.json). Config `version` identifies the input format; report and manifest `schemaVersion` identify their respective output formats. Use the matching schema to validate integrations. The schemas accept additional properties so consumers can tolerate compatible additions.
 
 See [`docs/compatibility.md`](./docs/compatibility.md) for compatibility, deprecation, and migration policy. Agent Done Check remains pre-1.0; this policy does not announce a 1.0 stability guarantee.
+
+### Commit-bound file checks
+
+Use `type: "file"` for simple assertions against files in the exact commit under verification. The adapter supports `exists`, exact UTF-8 `equals`, UTF-8 substring `contains`, and SHA-256 `sha256` assertions. See [`agent-done-check.file.example.json`](./agent-done-check.file.example.json) for a complete config. Paths must stay inside the checked-out worktree; files are limited to 1 MiB. Reports include only assertion metadata, byte count, and file hash, never file contents or the configured expected value. These checks prove a property of committed file bytes, not runtime behavior.
+
+The current JSON report schema is [schema v3](./schemas/report-v3.schema.json). Earlier v2 reports remain described by [schema v2](./schemas/report-v2.schema.json). Manifest schema remains [v1](./schemas/manifest-v1.schema.json).

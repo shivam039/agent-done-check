@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, lstat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -52,9 +52,9 @@ async function commitFiles(root, files) {
   git(root, 'commit', '--quiet', '-m', 'fixture');
 }
 
-async function invoke(root) {
+async function invoke(root, args = []) {
   try {
-    const stdout = execFileSync(process.execPath, [cliPath, '--config', 'agent-done-check.json'], {
+    const stdout = execFileSync(process.execPath, [cliPath, '--config', 'agent-done-check.json', ...args], {
       cwd: root,
       encoding: 'utf8',
       timeout: 30_000,
@@ -93,6 +93,148 @@ test('command report, evidence files, and manifest hashes agree', async (t) => {
   const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
   assert.ok(!markdown.includes('<img'));
   assert.match(markdown, /&lt;img/);
+});
+
+test('file checks verify exact committed bytes with bounded redacted evidence', async (t) => {
+  const root = await repository(t);
+  const content = 'release=0.6\n';
+  const digest = createHash('sha256').update(content).digest('hex');
+  const config = {
+    version: 1,
+    timeoutMs: 5000,
+    criteria: [{ id: 'file-state', description: 'Committed file assertions match.' }],
+    checks: [
+      { id: 'exists', type: 'file', path: 'src/release.txt', assertion: 'exists', criteria: ['file-state'] },
+      { id: 'equals', type: 'file', path: 'src/release.txt', assertion: 'equals', expected: content, criteria: ['file-state'] },
+      { id: 'contains', type: 'file', path: 'src/release.txt', assertion: 'contains', expected: 'release=0.6', criteria: ['file-state'] },
+      { id: 'sha256', type: 'file', path: 'src/release.txt', assertion: 'sha256', expected: digest, criteria: ['file-state'] },
+    ],
+  };
+  await commitFiles(root, {
+    'agent-done-check.json': JSON.stringify(config),
+    'src/release.txt': content,
+  });
+  const targetCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  await writeFile(path.join(root, 'src/release.txt'), 'release=changed\n');
+  git(root, 'add', '.');
+  git(root, 'commit', '--quiet', '-m', 'change file after target commit');
+
+  const result = await invoke(root, ['--commit', targetCommit]);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks) || result.stdout);
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(report.schemaVersion, 3);
+  assert.equal(report.commit, targetCommit);
+  for (const check of report.checks) {
+    assert.equal(check.status, 'passed', JSON.stringify(check));
+    assert.equal(check.file.sha256, digest);
+    assert.equal(check.file.bytes, Buffer.byteLength(content));
+    assert.equal(check.file.matched, true);
+  }
+  assert.ok(!JSON.stringify(report).includes(content));
+});
+
+test('file checks report missing files as failed and traversal as invalid config', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ type: 'file', path: 'missing.txt', assertion: 'exists' });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const missing = await invoke(root);
+  assert.equal(missing.code, 1, JSON.stringify(missing.report?.checks));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(report.checks[0].status, 'failed');
+  assert.equal(report.checks[0].file.exists, false);
+  assert.equal(report.checks[0].file.matched, false);
+
+  config.checks[0].path = '../outside.txt';
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', 'agent-done-check.json');
+  git(root, 'commit', '--quiet', '-m', 'invalid traversal config');
+  const traversal = await invoke(root);
+  assert.equal(traversal.code, 2);
+  assert.match(traversal.stderr, /path: must be a non-empty relative path/);
+
+  for (const invalidPath of ['/outside.txt', 'C:\\outside.txt', 'bad\0path']) {
+    config.checks[0].path = invalidPath;
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    git(root, 'add', 'agent-done-check.json');
+    git(root, 'commit', '--quiet', '-m', 'reject unsafe file path');
+    const invalid = await invoke(root);
+    assert.equal(invalid.code, 2, `path should be rejected: ${JSON.stringify(invalidPath)}`);
+  }
+});
+
+test('file checks mark directories as unverified', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ type: 'file', path: 'directory', assertion: 'exists' });
+  await commitFiles(root, {
+    'agent-done-check.json': JSON.stringify(config),
+    'directory/entry.txt': 'nested file',
+    'unreadable.txt': 'restricted file',
+  });
+  const directoryResult = await invoke(root);
+  assert.equal(directoryResult.code, 1);
+  const directoryReport = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(directoryReport.checks[0].status, 'unverified');
+  assert.match(directoryReport.checks[0].error, /not a regular file/);
+});
+
+test('file checks leave expected values and file contents out of output and reject oversized or invalid UTF-8 files', async (t) => {
+  const root = await repository(t);
+  const expected = 'a-sensitive-value-that-must-not-be-reported';
+  const config = baseConfig({ type: 'file', path: 'private.txt', assertion: 'contains', expected });
+  await commitFiles(root, {
+    'agent-done-check.json': JSON.stringify(config),
+    'private.txt': `${expected}\n`,
+    'invalid-utf8.bin': Buffer.from([0xff, 0xfe]),
+    'oversized.txt': 'x'.repeat(1_048_577),
+  });
+  const result = await invoke(root);
+  assert.equal(result.code, 0, JSON.stringify(result.report?.checks));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.ok(!JSON.stringify(report).includes(expected));
+  assert.ok(!JSON.stringify(report).includes(`${expected}\n`));
+
+  config.checks[0] = { ...config.checks[0], id: 'invalid-utf8', path: 'invalid-utf8.bin', assertion: 'equals', expected: 'text' };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', 'agent-done-check.json');
+  git(root, 'commit', '--quiet', '-m', 'verify invalid UTF-8 behavior');
+  const invalidUtf8 = await invoke(root);
+  assert.equal(invalidUtf8.code, 1);
+  const invalidReport = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(invalidReport.checks[0].status, 'unverified');
+  assert.match(invalidReport.checks[0].error, /valid UTF-8/);
+
+  config.checks[0] = { ...config.checks[0], id: 'oversized', path: 'oversized.txt' };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', 'agent-done-check.json');
+  git(root, 'commit', '--quiet', '-m', 'verify oversized file behavior');
+  const oversized = await invoke(root);
+  assert.equal(oversized.code, 1);
+  const oversizedReport = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(oversizedReport.checks[0].status, 'unverified');
+  assert.match(oversizedReport.checks[0].error, /exceeds the 1048576-byte limit/);
+});
+
+test('file checks reject symlinks resolving outside the verified worktree', async (t) => {
+  const root = await repository(t);
+  const outside = `${root}-outside.txt`;
+  await writeFile(outside, 'outside-secret');
+  t.after(() => rm(outside, { force: true }));
+  try { await symlink(outside, path.join(root, 'escape.txt')); }
+  catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) { t.skip('Symlinks are unavailable in this environment.'); return; }
+    throw error;
+  }
+  await commitFiles(root, {
+    'agent-done-check.json': JSON.stringify(baseConfig({ type: 'file', path: 'escape.txt', assertion: 'exists' })),
+  });
+  const trackedSymlink = await lstat(path.join(root, 'escape.txt'));
+  if (!trackedSymlink.isSymbolicLink() && process.platform === 'win32') { t.skip('Git checkout does not preserve symlinks in this environment.'); return; }
+  const result = await invoke(root);
+  assert.equal(result.code, 1, JSON.stringify(result.report?.checks));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(report.checks[0].status, 'unverified');
+  assert.match(report.checks[0].error, /outside the verified worktree/);
+  assert.ok(!JSON.stringify(report).includes('outside-secret'));
 });
 
 test('checks receive only baseline and explicitly allowed host environment; marked values are redacted', async (t) => {

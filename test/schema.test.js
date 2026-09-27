@@ -12,9 +12,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(ajv);
 const configSchema = JSON.parse(await readFile(path.join(root, 'schemas/config-v1.schema.json'), 'utf8'));
-const reportSchema = JSON.parse(await readFile(path.join(root, 'schemas/report-v2.schema.json'), 'utf8'));
+const reportV2Schema = JSON.parse(await readFile(path.join(root, 'schemas/report-v2.schema.json'), 'utf8'));
+const reportSchema = JSON.parse(await readFile(path.join(root, 'schemas/report-v3.schema.json'), 'utf8'));
 const manifestSchema = JSON.parse(await readFile(path.join(root, 'schemas/manifest-v1.schema.json'), 'utf8'));
 const validateConfig = ajv.compile(configSchema);
+const validateReportV2 = ajv.compile(reportV2Schema);
 const validateReport = ajv.compile(reportSchema);
 const validateManifest = ajv.compile(manifestSchema);
 
@@ -26,8 +28,8 @@ function git(cwd, ...args) {
   execFileSync('git', args, { cwd, stdio: 'ignore' });
 }
 
-test('shipped command and browser configs conform to config v1 schema', async () => {
-  for (const filename of ['agent-done-check.example.json', 'agent-done-check.browser.example.json']) {
+test('shipped command, browser, and file configs conform to config v1 schema', async () => {
+  for (const filename of ['agent-done-check.example.json', 'agent-done-check.browser.example.json', 'agent-done-check.file.example.json']) {
     const config = JSON.parse(await readFile(path.join(root, filename), 'utf8'));
     assertValid(validateConfig, config, filename);
   }
@@ -43,10 +45,17 @@ test('generated report and manifest conform; browser result shape is covered', a
   git(repository, 'config', 'user.email', 'schema@example.invalid');
   const config = {
     version: 1,
-    criteria: [{ id: 'runs', description: 'The smoke command runs.' }],
-    checks: [{ id: 'smoke', command: 'node --version', criteria: ['runs'] }],
+    criteria: [
+      { id: 'runs', description: 'The smoke command runs.' },
+      { id: 'file', description: 'The committed file contains the expected marker.' },
+    ],
+    checks: [
+      { id: 'smoke', command: 'node --version', criteria: ['runs'] },
+      { id: 'file-marker', type: 'file', path: 'fixture.txt', assertion: 'contains', expected: 'schema fixture', criteria: ['file'] },
+    ],
   };
   await writeFile(path.join(repository, 'agent-done-check.json'), `${JSON.stringify(config)}\n`);
+  await writeFile(path.join(repository, 'fixture.txt'), 'schema fixture\n');
   git(repository, 'add', '.');
   git(repository, 'commit', '--quiet', '-m', 'schema fixture');
   execFileSync(process.execPath, [path.join(root, 'bin/agent-done-check.js'), '--config', 'agent-done-check.json'], {
@@ -59,6 +68,7 @@ test('generated report and manifest conform; browser result shape is covered', a
   const manifest = JSON.parse(await readFile(path.join(output, 'manifest.json'), 'utf8'));
   assertValid(validateReport, report, 'generated report');
   assertValid(validateManifest, manifest, 'generated manifest');
+  assertValid(validateReportV2, { ...report, schemaVersion: 2, checks: report.checks.filter((check) => check.type !== 'file'), criteria: [report.criteria[0]] }, 'backward-compatible report v2 fixture');
 
   const browserReport = structuredClone(report);
   browserReport.checks[0].type = 'playwright';
