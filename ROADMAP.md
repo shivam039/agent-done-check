@@ -7,6 +7,7 @@ Implemented:
 - By default, checks inherit only platform basics required to run tools. Additional host variables must be listed in `inheritEnv`.
 - `redactEnv` masks named host/config values in captured command output and browser diagnostics. Common bearer, GitHub, OpenAI-style, and JWT token patterns are masked too.
 - The GitHub Actions examples use read-only repository permissions and disable checkout credential persistence; a reusable workflow is available for trusted caller repositories.
+- GitHub Actions dependencies are pinned to verified commits on Node.js 24-compatible release lines.
 - Project CI is configured to run tests on Linux, macOS, and Windows with Node.js 22 and 24.
 - Known GitHub Actions credential/control variables and npm publish tokens are rejected from `inheritEnv`.
 - Documentation explains the limits of masking, shell execution, and worktree isolation.
