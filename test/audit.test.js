@@ -910,6 +910,59 @@ test('HTTP checks require exact commit binding and keep response content out of 
   assert.ok(!JSON.stringify(report).includes(createHash('sha256').update(Buffer.from('not configured')).digest('hex')));
 });
 
+test('HTTP expectedStatuses accepts any configured exact status and validates lists', async (t) => {
+  const root = await repository(t);
+  let targetCommit;
+  const server = createServer((request, response) => {
+    response.setHeader('x-agent-done-check-commit', targetCommit);
+    const status = Number(request.url.slice(1));
+    response.writeHead(status).end();
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const port = server.address().port;
+  const config = {
+    version: 1,
+    criteria: [{ id: 'statuses', description: 'One allowed response status was returned.' }],
+    checks: [201, 204, 200].map((status) => ({
+      id: `status-${status}`, type: 'http', url: `http://127.0.0.1:${port}/${status}`,
+      ...(status === 200 ? { expectedStatus: 201 } : { expectedStatuses: [201, 204] }), criteria: ['statuses'],
+    })),
+  };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', '.'); git(root, 'commit', '--quiet', '-m', 'HTTP status list config');
+  targetCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const result = await invokeAsync(root, ['--commit', targetCommit]);
+  assert.equal(result.code, 1);
+  const checks = Object.fromEntries(result.report.checks.map((check) => [check.id, check]));
+  assert.equal(checks['status-201'].status, 'passed');
+  assert.equal(checks['status-204'].status, 'passed');
+  assert.equal(checks['status-201'].http.expectedStatus, 201);
+  assert.deepEqual(checks['status-201'].http.expectedStatuses, [201, 204]);
+  assert.equal(checks['status-200'].status, 'failed');
+  assert.deepEqual(checks['status-200'].http.expectedStatuses, [201]);
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  assert.match(markdown, /expected 201 or 204/);
+
+  const validate = async () => {
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    return invoke(root, ['--validate']);
+  };
+  config.checks[0].expectedStatus = 200;
+  assert.equal((await validate()).code, 2);
+  config.checks[0].expectedStatus = undefined;
+  config.checks[0].type = 'command';
+  config.checks[0].command = 'node --version';
+  assert.equal((await validate()).code, 2);
+  config.checks[0].type = 'http';
+  delete config.checks[0].command;
+  delete config.checks[0].expectedStatus;
+  for (const statuses of [[], [99], [600], [200, 200], Array.from({ length: 21 }, (_, index) => 100 + index), [200.5]]) {
+    config.checks[0].expectedStatuses = statuses;
+    assert.equal((await validate()).code, 2, JSON.stringify(statuses));
+  }
+});
+
 test('HTTP body digest assertions compare bounded raw bytes after binding and validate config', async (t) => {
   const root = await repository(t);
   let targetCommit;

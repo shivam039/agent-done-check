@@ -12,13 +12,15 @@
       "id": "health-endpoint",
       "type": "http",
       "url": "https://example.invalid/health",
-      "expectedStatus": 200,
       "bodyContains": "healthy",
       "criteria": [
         "deployment"
       ],
-      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "maxBodyBytes": 65536
+      "maxBodyBytes": 65536,
+      "expectedStatuses": [
+        200,
+        201
+      ]
     },
     {
       "id": "health-data",
