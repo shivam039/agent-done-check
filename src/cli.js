@@ -12,6 +12,7 @@ const MAX_OUTPUT = 24_000;
 const MAX_TIMEOUT = 1_800_000;
 const MAX_CONFIG_BYTES = 1_048_576;
 const MAX_FILE_CHECK_BYTES = 1_048_576;
+const MAX_HTTP_BODY_BYTES = 1_048_576;
 const MAX_VIEWPORT_PIXELS = 16_000_000;
 const MAX_CRITERIA = 500;
 const MAX_CHECKS = 100;
@@ -306,6 +307,60 @@ async function runFileCheck(repository, commit, check) {
   return { status: file.matched ? 'passed' : 'failed', error: file.matched ? undefined : 'The file did not satisfy the configured assertion.', file };
 }
 
+async function runHttpCheck(commit, check, timeoutMs) {
+  const url = new URL(check.url);
+  const commitHeader = (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const evidence = { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null,
+    commitHeader, revisionBinding: 'missing', bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null };
+  try {
+    const response = await fetch(url, { method: 'GET', redirect: 'error', signal: controller.signal });
+    evidence.statusCode = response.status;
+    const observedCommit = response.headers.get(commitHeader);
+    if (observedCommit !== commit) {
+      evidence.revisionBinding = observedCommit === null ? 'missing' : 'mismatch';
+      await response.body?.cancel();
+      return { status: 'unverified', error: 'The HTTP response did not prove it serves the requested commit.', http: evidence };
+    }
+    evidence.revisionBinding = 'verified';
+    const reader = response.body?.getReader();
+    const chunks = [];
+    let bytes = 0;
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      chunks.push(Buffer.from(value));
+      if (bytes > MAX_HTTP_BODY_BYTES) {
+        evidence.bodyBytes = bytes;
+        evidence.bodyTruncated = true;
+        await reader.cancel();
+        return { status: 'unverified', error: `The HTTP response exceeds the ${MAX_HTTP_BODY_BYTES}-byte limit.`, http: evidence };
+      }
+    }
+    const body = Buffer.concat(chunks);
+    evidence.bodyBytes = body.byteLength;
+    evidence.bodySha256 = sha256(body);
+    if (typeof check.bodyContains === 'string') {
+      let content;
+      try { content = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(body); }
+      catch { return { status: 'unverified', error: 'The HTTP response body is not valid UTF-8 for bodyContains.', http: evidence }; }
+      evidence.bodyContainsMatched = content.includes(check.bodyContains);
+    }
+    const matched = response.status === evidence.expectedStatus && evidence.bodyContainsMatched !== false;
+    return { status: matched ? 'passed' : 'failed', error: matched ? undefined : 'The bound HTTP response did not satisfy the configured assertion.', http: evidence };
+  } catch {
+    return { status: 'unverified', error: controller.signal.aborted ? 'The HTTP request timed out.' : 'The HTTP request could not be completed safely.', http: evidence };
+  } finally { clearTimeout(timer); }
+}
+
+function unavailableHttpResult(check) {
+  return { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null,
+    commitHeader: (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase(), revisionBinding: 'missing',
+    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null };
+}
+
 function validate(config) {
   const errors = [];
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Config must be a JSON object.');
@@ -352,7 +407,7 @@ function validate(config) {
     else if (checkIds.has(check.id)) errors.push(`${at}.id: duplicate check id "${check.id}".`);
     else checkIds.add(check.id);
     const checkType = check.type ?? 'command';
-    if (!['command', 'playwright', 'file'].includes(checkType)) errors.push(`${at}.type: expected "command", "playwright", or "file".`);
+    if (!['command', 'playwright', 'file', 'http'].includes(checkType)) errors.push(`${at}.type: expected "command", "playwright", "file", or "http".`);
     if (checkType === 'command' && (typeof check.command !== 'string' || !check.command.trim())) errors.push(`${at}.command: must be a non-empty string.`);
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
@@ -360,6 +415,15 @@ function validate(config) {
       if (['equals', 'contains', 'sha256'].includes(check.assertion) && typeof check.expected !== 'string') errors.push(`${at}.expected: must be a string for ${check.assertion}.`);
       if (check.assertion === 'sha256' && typeof check.expected === 'string' && !/^[a-f0-9]{64}$/.test(check.expected)) errors.push(`${at}.expected: sha256 requires a 64-character lowercase hexadecimal digest.`);
       if (check.assertion === 'exists' && typeof check.expected !== 'undefined') errors.push(`${at}.expected: is not used with the exists assertion.`);
+    }
+    if (checkType === 'http') {
+      let parsed;
+      try { parsed = new URL(check.url); } catch { /* Report below. */ }
+      if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) errors.push(`${at}.url: must be an absolute HTTP(S) URL without embedded credentials.`);
+      if (typeof check.expectedStatus !== 'undefined' && (!Number.isInteger(check.expectedStatus) || check.expectedStatus < 100 || check.expectedStatus > 599)) errors.push(`${at}.expectedStatus: must be an HTTP status integer from 100 to 599.`);
+      if (typeof check.commitHeader !== 'undefined' && (typeof check.commitHeader !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(check.commitHeader))) errors.push(`${at}.commitHeader: must be a valid HTTP header name.`);
+      if (typeof check.bodyContains !== 'undefined' && typeof check.bodyContains !== 'string') errors.push(`${at}.bodyContains: must be a string.`);
+      if (typeof check.command !== 'undefined' || typeof check.headers !== 'undefined' || typeof check.method !== 'undefined' || typeof check.body !== 'undefined') errors.push(`${at}: HTTP checks accept only GET requests and do not accept command, headers, method, or body fields.`);
     }
     if (checkType === 'playwright') {
       let validUrl = false;
@@ -442,6 +506,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
       const outcome = check.file.matched ? 'matched' : check.status === 'failed' ? 'did not match' : 'could not be verified';
       lines.push('', `File assertion: ${markdownCode(check.file.assertion)} on ${markdownCode(check.file.path)} — ${outcome}${check.file.sha256 ? `; SHA-256 ${markdownCode(check.file.sha256)}` : ''}${check.file.bytes != null ? `; ${check.file.bytes} bytes` : ''}.`);
     }
+    if (check.http) lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; commit binding ${check.http.revisionBinding}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
     if (check.browser?.diagnostics) {
       const diagnostics = check.browser.diagnostics;
       const dropped = Object.values(diagnostics.dropped ?? {}).reduce((sum, count) => sum + count, 0);
@@ -502,7 +567,7 @@ export async function main(argv = process.argv.slice(2)) {
       const worktree = path.join(checkout, check.id);
       const add = await runGit(repository, ['worktree', 'add', '--detach', '--quiet', worktree, commit]);
       if (add.code !== 0) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, status: 'unverified', error: add.stderr.trim() || 'Unable to create isolated verification worktree.', file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, status: 'unverified', error: add.stderr.trim() || 'Unable to create isolated verification worktree.', file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
         console.log(`UNVERIFIED ${check.id}`);
         continue;
       }
@@ -512,6 +577,8 @@ export async function main(argv = process.argv.slice(2)) {
         const deadline = Date.now() + timeoutMs;
         if (check.type === 'file') {
           result = await runFileCheck(repository, commit, check);
+        } else if (check.type === 'http') {
+          result = await runHttpCheck(commit, check, timeoutMs);
         } else if ((check.type ?? 'command') === 'playwright') {
           let setupResult = { code: 0, stdout: '', stderr: '' };
           let setupTimeMs = 0;
@@ -569,7 +636,7 @@ export async function main(argv = process.argv.slice(2)) {
           id: check.id,
           type: check.type ?? 'command',
           criteria: check.criteria,
-          command: check.type === 'file' ? undefined : redactString(check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, secretsToRedact),
+          command: ['file', 'http'].includes(check.type) ? undefined : redactString(check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, secretsToRedact),
           status: result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed'),
           error: result.error,
           exitCode: result.code,
@@ -581,9 +648,10 @@ export async function main(argv = process.argv.slice(2)) {
           outputTruncated: { stdout: result.stdoutTruncated, stderr: result.stderrTruncated },
           browser: result.browser,
           file: result.file ?? (check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined),
+          http: result.http,
         });
       } catch (error) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: check.command, status: 'unverified', error: redactString(error.message, secretsToRedact), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: check.command, status: 'unverified', error: redactString(error.message, secretsToRedact), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
       } finally {
         await runGit(repository, ['worktree', 'remove', '--force', worktree]);
       }
@@ -600,7 +668,7 @@ export async function main(argv = process.argv.slice(2)) {
     const status = criteria.some((item) => item.status === 'failed') ? 'failed'
       : criteria.some((item) => item.status === 'unverified') ? 'unverified' : 'passed';
     const report = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       tool: { name: 'agent-done-check', version: VERSION },
       runId,
       status,

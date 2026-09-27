@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, lstat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:http';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cliPath = path.join(packageRoot, 'bin', 'agent-done-check.js');
@@ -70,6 +72,20 @@ async function invoke(root, args = []) {
   }
 }
 
+async function invokeAsync(root, args = []) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [cliPath, '--config', 'agent-done-check.json', ...args], { cwd: root });
+    let stdout = ''; let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
+    child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
+    child.on('close', async (code) => {
+      let report;
+      try { report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8')); } catch { /* No report on setup failure. */ }
+      resolve({ code, stdout, stderr, report });
+    });
+  });
+}
+
 test('command report, evidence files, and manifest hashes agree', async (t) => {
   const root = await repository(t);
   const config = baseConfig({ command: nodeCommand('console.log("evidence-ok")') });
@@ -122,7 +138,7 @@ test('file checks verify exact committed bytes with bounded redacted evidence', 
   const result = await invoke(root, ['--commit', targetCommit]);
   assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks) || result.stdout);
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
-  assert.equal(report.schemaVersion, 3);
+  assert.equal(report.schemaVersion, 4);
   assert.equal(report.commit, targetCommit);
   for (const check of report.checks) {
     assert.equal(check.status, 'passed', JSON.stringify(check));
@@ -412,7 +428,7 @@ test('a failed check takes precedence over another unverified check for one crit
   await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
 
   const result = await invoke(root);
-  assert.equal(result.code, 1);
+  assert.equal(result.code, 1, `${result.stderr}\n${result.stdout}\n${JSON.stringify(result.report?.checks)}`);
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.checks[0].status, 'failed');
   assert.equal(report.checks[1].status, 'unverified');
@@ -432,7 +448,7 @@ test('checks get fresh worktrees and source-changing checks cannot pass', async 
   await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config), 'source.txt': 'original' });
 
   const result = await invoke(root);
-  assert.equal(result.code, 1);
+  assert.equal(result.code, 1, `${result.stderr}\n${result.stdout}\n${JSON.stringify(result.report?.checks)}`);
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.checks[0].status, 'unverified');
   assert.match(report.checks[0].error, /tracked files changed/);
@@ -450,4 +466,59 @@ test('captured output limit is enforced in bytes and reports truncation', async 
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.checks[0].outputTruncated.stdout, true);
   assert.ok(Buffer.byteLength(report.checks[0].stdout, 'utf8') <= 24_000);
+});
+
+
+test('HTTP checks require exact commit binding and keep response content out of reports', async (t) => {
+  const root = await repository(t);
+  const server = createServer((request, response) => {
+    if (request.url === '/redirect') { response.writeHead(302, { location: '/ok' }).end(); return; }
+    if (request.url === '/missing') { response.end('unbound'); return; }
+    if (request.url === '/mismatch') { response.setHeader('x-agent-done-check-commit', 'ghp_abcdefghijklmnopqrstuvwxyz123456789'); response.end('secret body'); return; }
+    if (request.url === '/timeout') { const timer = setTimeout(() => response.end('late'), 3000); response.on('close', () => clearTimeout(timer)); return; }
+    response.setHeader('x-agent-done-check-commit', targetCommit);
+    if (request.url === '/failure') { response.writeHead(503); response.end('healthy'); return; }
+    if (request.url === '/large') { response.end(Buffer.alloc(1_048_577, 97)); return; }
+    if (request.url === '/binary') { response.end(Buffer.from([255, 254])); return; }
+    response.end('healthy response');
+  });
+  let targetCommit;
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const port = server.address().port;
+  const config = {
+    version: 1,
+    timeoutMs: 5000,
+    criteria: [{ id: 'http', description: 'HTTP evidence is bound to the verified revision.' }],
+    checks: ['/ok', '/missing', '/mismatch', '/redirect', '/failure', '/large', '/binary', '/timeout'].map((route) => ({
+      id: route.slice(1), type: 'http', url: `http://127.0.0.1:${port}${route}`,
+      ...(route === '/failure' ? { expectedStatus: 200 } : route === '/ok' ? { bodyContains: 'healthy' } : {}),
+      ...(route === '/binary' ? { bodyContains: 'text-only assertion' } : {}),
+      ...(route === '/timeout' ? { timeoutMs: 1000 } : {}), criteria: ['http'],
+    })),
+  };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', '.'); git(root, 'commit', '--quiet', '-m', 'HTTP config fixture');
+  targetCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const result = await invokeAsync(root, ['--commit', targetCommit]);
+  assert.equal(result.code, 1, `${result.stderr}\n${result.stdout}\n${JSON.stringify(result.report?.checks)}`);
+  const report = result.report;
+  assert.equal(report.schemaVersion, 4);
+  const checks = Object.fromEntries(report.checks.map((check) => [check.id, check]));
+  assert.equal(checks.ok.status, 'passed', JSON.stringify(checks.ok));
+  assert.equal(checks.ok.http.revisionBinding, 'verified');
+  assert.equal(checks.missing.status, 'unverified');
+  assert.equal(checks.missing.http.revisionBinding, 'missing');
+  assert.equal(checks.mismatch.status, 'unverified');
+  assert.equal(checks.mismatch.http.revisionBinding, 'mismatch');
+  assert.equal(checks.redirect.status, 'unverified');
+  assert.equal(checks.failure.status, 'failed');
+  assert.equal(checks.large.status, 'unverified');
+  assert.equal(checks.large.http.bodyTruncated, true);
+  assert.equal(checks.binary.status, 'unverified');
+  assert.equal(checks.timeout.status, 'unverified');
+  assert.match(checks.timeout.error, /timed out/);
+  assert.ok(!JSON.stringify(report).includes('healthy response'));
+  assert.ok(!JSON.stringify(report).includes('ghp_abcdefghijklmnopqrstuvwxyz123456789'));
+  assert.ok(!JSON.stringify(report).includes('healthy'));
 });

@@ -1,0 +1,518 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/shivam039/agent-done-check/blob/main/schemas/report-v4.schema.json",
+  "title": "Agent Done Check JSON report schema v4",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "tool",
+    "runId",
+    "status",
+    "repository",
+    "commit",
+    "startedAt",
+    "completedAt",
+    "reproducibility",
+    "criteria",
+    "checks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 4
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "agent-done-check"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "$ref": "#/$defs/status"
+    },
+    "repository": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40,64}$"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reproducibility": {
+      "type": "object",
+      "required": [
+        "configPath",
+        "configSha256",
+        "node",
+        "platform",
+        "arch",
+        "locale",
+        "timezone"
+      ],
+      "properties": {
+        "configPath": {
+          "type": "string"
+        },
+        "configSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "node": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "arch": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timezone": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "description",
+          "status",
+          "checks"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/status"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/checkResult"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "unverified"
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "checkResult": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "criteria",
+        "status",
+        "startedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "command",
+            "playwright",
+            "file",
+            "http"
+          ]
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "error": {
+          "type": "string"
+        },
+        "exitCode": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "signal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "durationMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "outputTruncated": {
+          "type": "object",
+          "properties": {
+            "stdout": {
+              "type": "boolean"
+            },
+            "stderr": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        "browser": {
+          "$ref": "#/$defs/browserResult"
+        },
+        "file": {
+          "$ref": "#/$defs/fileResult"
+        },
+        "http": {
+          "$ref": "#/$defs/httpResult"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "file"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "file": {}
+            },
+            "required": [
+              "file"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "http"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "http": {}
+            },
+            "required": [
+              "http"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "browserResult": {
+      "type": "object",
+      "required": [
+        "browser",
+        "url",
+        "setupTimeMs",
+        "revisionBinding",
+        "diagnostics",
+        "artifacts"
+      ],
+      "properties": {
+        "browser": {
+          "enum": [
+            "chromium",
+            "firefox",
+            "webkit"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "setupTimeMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "revisionBinding": {
+          "type": "object",
+          "required": [
+            "status",
+            "expected",
+            "observed"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "unverified",
+                "verified",
+                "mismatch",
+                "unavailable"
+              ]
+            },
+            "expected": {
+              "type": "string"
+            },
+            "observed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "diagnostics": {
+          "type": "object",
+          "properties": {
+            "browserVersion": {
+              "type": "string"
+            },
+            "consoleErrors": {
+              "type": "array"
+            },
+            "pageErrors": {
+              "type": "array"
+            },
+            "requestFailures": {
+              "type": "array"
+            },
+            "httpErrors": {
+              "type": "array"
+            },
+            "dropped": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "screenshotError": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/browserArtifact"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "browserArtifact": {
+      "type": "object",
+      "required": [
+        "path",
+        "role",
+        "mediaType",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "mediaType": {
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "fileResult": {
+      "type": "object",
+      "required": [
+        "path",
+        "assertion",
+        "exists",
+        "bytes",
+        "sha256",
+        "matched"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "assertion": {
+          "enum": [
+            "exists",
+            "equals",
+            "contains",
+            "sha256"
+          ]
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "matched": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "httpResult": {
+      "type": "object",
+      "required": [
+        "url",
+        "expectedStatus",
+        "statusCode",
+        "commitHeader",
+        "revisionBinding",
+        "bodyBytes",
+        "bodySha256",
+        "bodyTruncated",
+        "bodyContainsMatched"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "expectedStatus": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "statusCode": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "commitHeader": {
+          "type": "string"
+        },
+        "revisionBinding": {
+          "enum": [
+            "verified",
+            "missing",
+            "mismatch"
+          ]
+        },
+        "bodyBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "bodySha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bodyTruncated": {
+          "type": "boolean"
+        },
+        "bodyContainsMatched": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

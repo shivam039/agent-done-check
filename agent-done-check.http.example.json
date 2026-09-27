@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "timeoutMs": 10000,
+  "criteria": [
+    { "id": "deployment", "description": "The deployment serves the verified commit and expected health response." }
+  ],
+  "checks": [
+    {
+      "id": "health-endpoint",
+      "type": "http",
+      "url": "https://example.invalid/health",
+      "expectedStatus": 200,
+      "bodyContains": "healthy",
+      "criteria": ["deployment"]
+    }
+  ]
+}

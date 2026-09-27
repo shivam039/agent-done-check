@@ -1,6 +1,6 @@
 {
   "name": "agent-done-check",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Commit-bound acceptance checks for agent-assisted software changes",
   "license": "MIT",
   "type": "module",
@@ -23,7 +23,9 @@
     "agent-done-check.example.json",
     "agent-done-check.browser.example.json",
     "agent-done-check.file.example.json",
-    "examples"
+    "examples",
+    "docs/PRD-0.7.0-commit-bound-http-checks.md",
+    "agent-done-check.http.example.json"
   ],
   "scripts": {
     "start": "node ./bin/agent-done-check.js",

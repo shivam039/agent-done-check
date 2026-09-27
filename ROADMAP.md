@@ -1,6 +1,6 @@
 # Agent Done Check roadmap
 
-## Current release: 0.4.0 — Safer adoption
+## Completed: 0.4.0 — Safer adoption
 
 Implemented:
 
@@ -22,13 +22,21 @@ PRD: [`docs/PRD-0.5.0-stable-integration-contract.md`](./docs/PRD-0.5.0-stable-i
 - Document pre-1.0 compatibility, deprecation, and migration policy.
 - Validate examples and generated report/manifest output against the schemas in tests.
 
-## Current release work: 0.6.0 — Commit-bound file checks
+## Completed: 0.6.0 — Commit-bound file checks
 
 PRD: [`docs/PRD-0.6.0-commit-bound-file-checks.md`](./docs/PRD-0.6.0-commit-bound-file-checks.md)
 
 - Add static file assertions for existence, exact UTF-8 text, contained text, or SHA-256.
 - Bind assertions to the requested commit's detached worktree and emit bounded hash metadata.
 - Keep report schema v2 available and version the current report shape as schema v3.
+
+## Current release work: 0.7.0 — Commit-bound HTTP checks
+
+PRD: [`docs/PRD-0.7.0-commit-bound-http-checks.md`](./docs/PRD-0.7.0-commit-bound-http-checks.md)
+
+- Add read-only GET checks whose response must expose the exact requested commit SHA.
+- Bound response bodies and record only sanitized status and hash metadata.
+- Preserve report schemas v2 and v3 and introduce report schema v4.
 
 ## Later
 

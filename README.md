@@ -90,7 +90,7 @@ See [`ROADMAP.md`](./ROADMAP.md) for implemented capabilities and planned work. 
 
 ## Integration contracts
 
-JSON Schemas are published in [`schemas/`](./schemas/): [config v1](./schemas/config-v1.schema.json), [current report schema v3](./schemas/report-v3.schema.json), [previous report schema v2](./schemas/report-v2.schema.json), and [manifest schema v1](./schemas/manifest-v1.schema.json). Config `version` identifies the input format; report and manifest `schemaVersion` identify their respective output formats. Use the matching schema to validate integrations. The schemas accept additional properties so consumers can tolerate compatible additions.
+JSON Schemas are published in [`schemas/`](./schemas/): [config v1](./schemas/config-v1.schema.json), [current report schema v4](./schemas/report-v3.schema.json), [previous report schema v2](./schemas/report-v2.schema.json), and [manifest schema v1](./schemas/manifest-v1.schema.json). Config `version` identifies the input format; report and manifest `schemaVersion` identify their respective output formats. Use the matching schema to validate integrations. The schemas accept additional properties so consumers can tolerate compatible additions.
 
 See [`docs/compatibility.md`](./docs/compatibility.md) for compatibility, deprecation, and migration policy. Agent Done Check remains pre-1.0; this policy does not announce a 1.0 stability guarantee.
 
@@ -98,4 +98,8 @@ See [`docs/compatibility.md`](./docs/compatibility.md) for compatibility, deprec
 
 Use `type: "file"` for simple assertions against files in the exact commit under verification. The adapter supports `exists`, exact UTF-8 `equals`, UTF-8 substring `contains`, and SHA-256 `sha256` assertions. See [`agent-done-check.file.example.json`](./agent-done-check.file.example.json) for a complete config. Paths must be normalized relative paths to regular files in the target commit; symbolic links are unverified. Files are limited to 1 MiB. The adapter reads raw Git blobs so checkout filters and platform line-ending rules do not change results. Reports include only assertion metadata, byte count, and file hash, never file contents or the configured expected value. These checks prove a property of committed file bytes, not runtime behavior.
 
-The current JSON report schema is [schema v3](./schemas/report-v3.schema.json). Earlier v2 reports remain described by [schema v2](./schemas/report-v2.schema.json). Manifest schema remains [v1](./schemas/manifest-v1.schema.json).
+The current JSON report schema is [schema v4](./schemas/report-v4.schema.json). Earlier v3 and v2 reports remain described by [schema v3](./schemas/report-v3.schema.json) and [schema v2](./schemas/report-v2.schema.json). Manifest schema remains [v1](./schemas/manifest-v1.schema.json).
+
+### Commit-bound HTTP checks
+
+Use `type: "http"` for a read-only `GET` probe. The response must include the exact target commit SHA in `x-agent-done-check-commit` (or a configured `commitHeader`) before its status or optional UTF-8 `bodyContains` assertion can pass. Redirects are rejected, request headers and bodies cannot be configured, and response bodies are capped at 1 MiB. Reports contain a sanitized URL, HTTP status, revision-binding result, body byte count and SHA-256; response content and commit-header values are never recorded. Missing or mismatched commit evidence, timeouts, redirects, oversized bodies, and invalid UTF-8 are unverified. See [`agent-done-check.http.example.json`](./agent-done-check.http.example.json). Configs are trusted policy and can still probe any network address available to the host.
