@@ -188,6 +188,7 @@ function run(command, args, options = {}) {
     let stdoutTruncated = false;
     let stderrTruncated = false;
     let settled = false;
+    let timer;
     const append = (current, chunk, stream) => {
       const combined = Buffer.concat([current, chunk]);
       if (combined.byteLength > MAX_OUTPUT) {
@@ -200,8 +201,15 @@ function run(command, args, options = {}) {
     const snapshot = (code, signal) => ({ code, signal, stdout: stdout.toString('utf8'), stderr: stderr.toString('utf8'), stdoutTruncated, stderrTruncated });
     child.stdout.on('data', (chunk) => { stdout = append(stdout, chunk, 'stdout'); });
     child.stderr.on('data', (chunk) => { stderr = append(stderr, chunk, 'stderr'); });
+    child.stdin.on('error', (error) => {
+      if (error.code === 'EPIPE') return;
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signalTree(child, 'SIGTERM');
+      reject(error);
+    });
     child.stdin.end(input ?? '');
-    let timer;
     child.on('error', (error) => {
       if (settled) return;
       settled = true;
