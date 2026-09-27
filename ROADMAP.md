@@ -56,7 +56,7 @@ PRD: [`docs/PRD-0.10.0-sarif-export.md`](./docs/PRD-0.10.0-sarif-export.md)
 
 - Export failed and unverified checks as SARIF 2.1.0 and include it in the bundle manifest.
 
-## Current release work: 0.11.0 — JUnit XML export
+## Completed: 0.11.0 — JUnit XML export
 
 PRD: [`docs/PRD-0.11.0-junit-export.md`](./docs/PRD-0.11.0-junit-export.md)
 
