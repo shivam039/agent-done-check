@@ -8,17 +8,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const cliPath = path.join(packageRoot, 'bin', 'commitproof.js');
+const cliPath = path.join(packageRoot, 'bin', 'agent-done-check.js');
 
 function git(cwd, ...args) {
   execFileSync('git', args, { cwd, stdio: 'ignore' });
 }
 
 async function repository(t) {
-  const root = await mkdtemp(path.join(tmpdir(), 'commitproof-audit-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'agent-done-check-audit-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   git(root, 'init', '--quiet');
-  git(root, 'config', 'user.name', 'CommitProof Audit');
+  git(root, 'config', 'user.name', 'Agent Done Check Audit');
   git(root, 'config', 'user.email', 'audit@example.invalid');
   return root;
 }
@@ -49,7 +49,7 @@ async function commitFiles(root, files) {
 
 async function invoke(root) {
   try {
-    const stdout = execFileSync(process.execPath, [cliPath, '--config', 'commitproof.json'], {
+    const stdout = execFileSync(process.execPath, [cliPath, '--config', 'agent-done-check.json'], {
       cwd: root,
       encoding: 'utf8',
       timeout: 30_000,
@@ -65,22 +65,22 @@ test('command report, evidence files, and manifest hashes agree', async (t) => {
   const config = baseConfig({ command: nodeCommand('console.log("evidence-ok")') });
   config.criteria[0].description = '<img src=x onerror=alert(1)> | behavior';
   await commitFiles(root, {
-    'commitproof.json': JSON.stringify(config),
+    'agent-done-check.json': JSON.stringify(config),
   });
 
   const result = await invoke(root);
   assert.equal(result.code, 0, result.stderr);
-  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
-  const manifest = JSON.parse(await readFile(path.join(root, '.commitproof/manifest.json'), 'utf8'));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  const manifest = JSON.parse(await readFile(path.join(root, '.agent-done-check/manifest.json'), 'utf8'));
   assert.equal(report.status, 'passed');
   assert.equal(report.checks[0].stdout.trim(), 'evidence-ok');
   assert.equal(manifest.runId, report.runId);
   assert.ok(manifest.artifacts.some((artifact) => artifact.role === 'markdown-report'));
   const stdoutArtifact = manifest.artifacts.find((artifact) => artifact.role === 'stdout');
   assert.ok(stdoutArtifact);
-  const stdoutBytes = await readFile(path.join(root, '.commitproof', stdoutArtifact.path));
+  const stdoutBytes = await readFile(path.join(root, '.agent-done-check', stdoutArtifact.path));
   assert.equal(stdoutArtifact.sha256, createHash('sha256').update(stdoutBytes).digest('hex'));
-  const markdown = await readFile(path.join(root, '.commitproof/report.md'), 'utf8');
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
   assert.ok(!markdown.includes('<img'));
   assert.match(markdown, /&lt;img/);
 });
@@ -88,7 +88,7 @@ test('command report, evidence files, and manifest hashes agree', async (t) => {
 test('invalid browser URL is rejected before a worktree is created', async (t) => {
   const root = await repository(t);
   await commitFiles(root, {
-    'commitproof.json': JSON.stringify(baseConfig({ type: 'playwright', url: 'http://', steps: [{ action: 'expectUrl', value: '/' }] })),
+    'agent-done-check.json': JSON.stringify(baseConfig({ type: 'playwright', url: 'http://', steps: [{ action: 'expectUrl', value: '/' }] })),
   });
   const result = await invoke(root);
   assert.equal(result.code, 2);
@@ -115,7 +115,7 @@ module.exports = {
               handlers.response({ status: () => 401, url: () => url });
             },
             waitForURL: async () => {},
-            locator: () => ({ first() { return this; }, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async () => process.env.COMMITPROOF_TARGET_COMMIT }),
+            locator: () => ({ first() { return this; }, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async () => process.env.AGENT_DONE_CHECK_TARGET_COMMIT }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -143,7 +143,7 @@ module.exports = {
   });
   config.env = { SETUP_MARKER: path.join(root, 'setup.count') };
   await commitFiles(root, {
-    'commitproof.json': JSON.stringify(config),
+    'agent-done-check.json': JSON.stringify(config),
     'package.json': JSON.stringify({ name: 'fixture', version: '1.0.0' }),
     'node_modules/playwright/package.json': JSON.stringify({ name: 'playwright', version: '0.0.0', main: 'index.js' }),
     'node_modules/playwright/index.js': fakePlaywright,
@@ -151,8 +151,8 @@ module.exports = {
 
   const result = await invoke(root);
   assert.equal(result.code, 1, result.stderr);
-  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
-  const manifest = JSON.parse(await readFile(path.join(root, '.commitproof/manifest.json'), 'utf8'));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  const manifest = JSON.parse(await readFile(path.join(root, '.agent-done-check/manifest.json'), 'utf8'));
   const check = report.checks[0];
   assert.equal(report.status, 'unverified');
   assert.equal(check.browser.diagnostics.browserVersion, 'fake-chromium-1');
@@ -165,7 +165,7 @@ module.exports = {
   assert.ok(manifest.artifacts.some((artifact) => artifact.role === 'browser-screenshot' && artifact.sha256));
   assert.equal(report.checks[1].status, 'unverified');
   assert.equal(report.checks[1].browser.revisionBinding.status, 'unverified');
-  assert.match(await readFile(path.join(root, '.commitproof/report.md'), 'utf8'), /browser-screenshot/);
+  assert.match(await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8'), /browser-screenshot/);
 });
 
 test('timeout terminates descendant processes and marks the criterion unverified', async (t) => {
@@ -175,11 +175,11 @@ test('timeout terminates descendant processes and marks the criterion unverified
   const command = nodeCommand(script);
   const config = baseConfig({ command, timeoutMs: 1000 });
   config.env = { MARKER: marker };
-  await commitFiles(root, { 'commitproof.json': JSON.stringify(config) });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
 
   const result = await invoke(root);
   assert.equal(result.code, 1, result.stderr);
-  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.status, 'unverified');
   await new Promise((resolve) => setTimeout(resolve, 1100));
   await assert.rejects(readFile(marker), { code: 'ENOENT' });
@@ -191,7 +191,7 @@ test('completed commands do not leave detached descendants running', async (t) =
   const child = `spawn(process.execPath, ['-e', 'setTimeout(() => require("node:fs").writeFileSync(process.env.MARKER, "late"), 1600)'], { stdio: "ignore" }).unref();`;
   const config = baseConfig({ command: nodeCommand(`const { spawn } = require("node:child_process"); ${child}`) });
   config.env = { MARKER: marker };
-  await commitFiles(root, { 'commitproof.json': JSON.stringify(config) });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
 
   const result = await invoke(root);
   assert.equal(result.code, 0, result.stderr);
@@ -203,11 +203,11 @@ test('a failed check takes precedence over another unverified check for one crit
   const root = await repository(t);
   const config = baseConfig({ command: nodeCommand('process.exit(7)') });
   config.checks.push({ id: 'slow-check', command: nodeCommand('setTimeout(() => {}, 30000)'), timeoutMs: 1000, criteria: ['behavior'] });
-  await commitFiles(root, { 'commitproof.json': JSON.stringify(config) });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
 
   const result = await invoke(root);
   assert.equal(result.code, 1);
-  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.checks[0].status, 'failed');
   assert.equal(report.checks[1].status, 'unverified');
   assert.equal(report.criteria[0].status, 'failed');
@@ -223,11 +223,11 @@ test('checks get fresh worktrees and source-changing checks cannot pass', async 
     command: nodeCommand('if (require("node:fs").readFileSync("source.txt", "utf8") !== "original") process.exit(9)'),
     criteria: ['fresh-source'],
   });
-  await commitFiles(root, { 'commitproof.json': JSON.stringify(config), 'source.txt': 'original' });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config), 'source.txt': 'original' });
 
   const result = await invoke(root);
   assert.equal(result.code, 1);
-  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.checks[0].status, 'unverified');
   assert.match(report.checks[0].error, /tracked files changed/);
   assert.equal(report.checks[1].status, 'passed');
@@ -237,11 +237,11 @@ test('checks get fresh worktrees and source-changing checks cannot pass', async 
 test('captured output limit is enforced in bytes and reports truncation', async (t) => {
   const root = await repository(t);
   const command = nodeCommand('process.stdout.write("💥".repeat(20000))');
-  await commitFiles(root, { 'commitproof.json': JSON.stringify(baseConfig({ command })) });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(baseConfig({ command })) });
 
   const result = await invoke(root);
   assert.equal(result.code, 0, result.stderr);
-  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.checks[0].outputTruncated.stdout, true);
   assert.ok(Buffer.byteLength(report.checks[0].stdout, 'utf8') <= 24_000);
 });

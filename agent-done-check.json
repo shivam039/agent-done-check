@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "timeoutMs": 120000,
+  "criteria": [
+    { "id": "test-suite", "description": "The Agent Done Check test suite passes on this commit." },
+    { "id": "cli-help", "description": "The CLI help command starts successfully." }
+  ],
+  "checks": [
+    {
+      "id": "unit-tests",
+      "command": "node --test",
+      "criteria": ["test-suite"]
+    },
+    {
+      "id": "cli-help-output",
+      "command": "node ./bin/agent-done-check.js --help",
+      "criteria": ["cli-help"]
+    }
+  ]
+}

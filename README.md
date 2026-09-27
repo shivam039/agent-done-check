@@ -1,64 +1,72 @@
-# CommitProof
+# Agent Done Check
 
-CommitProof is an independent verification CLI for software changes. Give it acceptance criteria and explicit commands; it checks out the requested Git commit in a temporary worktree, runs the checks there, and writes a report bound to that commit.
+Agent Done Check is a local and CI tool for checking whether a specific Git commit satisfies explicit acceptance criteria. You provide the criteria and the commands or browser steps that verify them. The tool runs each check in a fresh detached worktree and writes a report tied to the exact commit.
 
-The coding agent's completion message is not an input to the verdict. CommitProof does not generate or repair application code.
+It does not decide whether requirements are complete on its own, inspect an AI agent's conversation, or modify application code. A passing result means only that the configured checks passed.
 
 ## Requirements
 
 - Node.js 20 or newer
 - Git
 
-## Use from a repository
+## Install and run
 
-Install the package once published:
+The package is not published to npm yet. From this checkout, run:
 
 ```sh
-npm install --save-dev commitproof-cli
-npx commitproof --config commitproof.json
+npm install
+node ./bin/agent-done-check.js --config agent-done-check.json
 ```
 
-Copy [`commitproof.example.json`](./commitproof.example.json) to `commitproof.json` and adapt it to the application. For example:
+To verify a specific revision, add `--commit <full-or-resolvable-revision>`. The default is `HEAD`. By default, the JSON report, Markdown report, and manifest are written under `.agent-done-check/`. Captured command output and browser screenshots are stored under `.agent-done-check/evidence/<run-id>/`. The `--output` and `--markdown-output` options can change the report paths.
+
+Copy [`agent-done-check.example.json`](./agent-done-check.example.json) to `agent-done-check.json` and replace its example criteria and commands with checks for your project. A command check looks like this:
 
 ```json
 {
   "version": 1,
   "timeoutMs": 120000,
   "criteria": [
-    { "id": "login", "description": "A user can sign in with valid credentials." },
-    { "id": "regression", "description": "The existing test suite remains green." }
+    { "id": "tests", "description": "The project test suite passes." }
   ],
   "checks": [
-    { "id": "login-browser", "command": "npm ci && npm run test:e2e -- --grep login", "criteria": ["login"] },
-    { "id": "unit-suite", "command": "npm ci && npm test", "criteria": ["regression"] }
+    {
+      "id": "unit-tests",
+      "command": "npm ci && npm test",
+      "criteria": ["tests"]
+    }
   ]
 }
 ```
 
-Run `commitproof` from the Git repository. It defaults to `HEAD`; use `--commit <sha>` to select another revision. By default it writes `.commitproof/report.json`, `.commitproof/report.md`, `.commitproof/manifest.json`, and captured output files under `.commitproof/evidence/<run-id>/`. Override the report destinations with `--output` and `--markdown-output`. Each check gets a fresh temporary detached worktree at that commit, with a bounded timeout. A check that leaves tracked or non-ignored files changed, or moves `HEAD`, cannot pass. This ensures revision consistency, but it is not a security sandbox: checks execute shell commands and repository code on the host, inheriting the host environment plus optional configured `env` values. Only use trusted repositories and verification configs.
+The config must be JSON. Each criterion must be referenced by at least one check to pass. Command checks run through the platform shell in a fresh detached Git worktree. Each check has a bounded timeout. A timeout or setup problem is `unverified`; a nonzero check exit is `failed`; a zero exit is `passed` only if the check did not change the checked-out source or move `HEAD`.
 
-Statuses are `passed`, `failed`, and `unverified`. A criterion without a mapped check, or with any timed-out/unstartable check, is `unverified`. The overall process exits 0 only when every criterion passes, 1 for failed or unverified criteria, and 2 for configuration or setup errors. Config errors include field paths and are collected together. The manifest contains SHA-256 hashes and byte sizes for the reports and captured check outputs. Each check output is capped to its final 24 KB; truncation is marked in the JSON report. The JSON report also records the config hash, Node version, platform, architecture, locale, and timezone to help reproduce a run.
+## Browser checks
 
-## Browser scenarios
+Playwright checks use the `type: "playwright"` configuration shown in [`agent-done-check.browser.example.json`](./agent-done-check.browser.example.json). They support `click`, `fill`, `check`, `uncheck`, `selectOption`, `press`, `expectVisible`, `expectHidden`, `expectText`, `expectValue`, and `expectUrl` steps.
 
-CommitProof has a built-in Playwright scenario runner. Copy [`commitproof.browser.example.json`](./commitproof.browser.example.json) and configure a `type: "playwright"` check with a reachable application URL and ordered steps. Supported actions are `click`, `fill`, `check`, `uncheck`, `selectOption`, `press`, `expectVisible`, `expectHidden`, `expectText`, `expectValue`, and `expectUrl`. Use CSS selectors or Playwright locator selectors. A scenario captures a viewport screenshot and records console errors, uncaught page errors, failed requests, and HTTP error responses. Uncaught page errors fail by default; the other diagnostic groups can be made fatal with their `failOn...` options.
+The target URL must already be reachable. To count as passed, the page must expose the exact requested commit SHA through the configured `commitAssertion`; otherwise the result is `unverified`. The temporary worktree needs Playwright and its browser installed. Use `setupCommand` for installation. Browser checks capture a viewport screenshot by default and record page errors, console errors, failed requests, and HTTP error responses. Uncaught page errors fail by default; the other diagnostics fail a check only when their `failOn...` option is set to `true`. The browser example contains placeholder URL and login values; replace them with a test environment and never commit real credentials.
 
-The verified worktree must install the `playwright` package and browser binary. Use `setupCommand` for that, such as `npm ci && npx playwright install chromium`; this command runs once on the host inside the temporary worktree and counts against the check timeout. The browser check's `url` must already be reachable (for example, a staging deployment). To receive a passing result, configure `commitAssertion` to read the full commit SHA exposed by the app, such as a `<meta name="commit-sha" content="...">` element. A browser scenario without a matching commit marker still runs but is `unverified`; it cannot prove that the requested commit is what the URL serves. Browser setup failures are also `unverified`; scenario assertion failures against a matching revision are `failed`. Browser URLs in reports have credentials, query strings, and fragments removed. Screenshots can still contain sensitive application data, so protect the evidence directory.
+## Results and safety
 
-Shell-check output and browser evidence are stored in the report bundle, so avoid printing credentials or other secrets from verification commands and protect the `.commitproof` directory.
+Criterion and overall statuses are `passed`, `failed`, or `unverified`. The process exits with:
 
-## Development
+- `0` when every criterion passed
+- `1` when any criterion failed or remains unverified
+- `2` for invalid configuration or a setup error that prevents the run
+
+Reports include the repository name, full commit SHA, config hash, run ID, runtime details, criterion-to-check mapping, and check outcomes. The manifest records SHA-256 hashes and byte sizes for report and evidence artifacts. Captured stdout and stderr are each limited to their final 24,000 bytes.
+
+**Checks are not sandboxed.** They execute project code and shell commands on the host and inherit the host environment, plus configured environment values. Use trusted repositories and configs. Avoid printing secrets: command output is saved as evidence. Browser screenshots may also contain sensitive data. Browser URLs in reports have credentials, query strings, and fragments removed.
+
+## Development and CI
+
+Run the test suite with:
 
 ```sh
 npm test
 ```
 
-The CLI supports Node.js 20+ on macOS, Linux, and Windows. Timeouts terminate the spawned process tree where the platform allows it.
+For GitHub Actions, see [`examples/github-actions.yml`](./examples/github-actions.yml). It runs checks against the triggering commit and uploads the report bundle. Review and adapt the sample workflow before using it: it runs commands from the repository under test.
 
-See [`ROADMAP.md`](./ROADMAP.md) for the master epic and release sequence.
-
-For a CI starting point, see [`examples/github-actions.yml`](./examples/github-actions.yml). The workflow checks out full Git history, runs CommitProof against the pull request or push commit, and uploads the report bundle.
-
-## License
-
-MIT
+See [`ROADMAP.md`](./ROADMAP.md) for implemented capabilities and planned work. The project is licensed under MIT.

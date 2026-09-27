@@ -1,83 +1,42 @@
-# CommitProof master epic
+# Agent Done Check roadmap
 
-## Product goal
+This document separates capabilities present in the current code from work that is still planned. A roadmap item is not a claim that the feature already exists.
 
-Build a reusable, agent-neutral verification engine that determines whether an application meets explicit acceptance criteria. It runs checks independently of the coding agent and creates reproducible evidence tied to an exact Git revision.
+## Current release: 0.3.0
 
-CommitProof verifies a candidate change. It does not write or repair application code, infer intent from an agent's completion claim, or treat that claim as evidence.
+Agent Done Check is a Node.js CLI that evaluates a versioned JSON contract against a selected Git commit.
 
-## Master epic
+Implemented:
 
-**As a developer or CI system, I can submit acceptance criteria and a candidate revision and receive a reproducible report showing which criteria passed, failed, or remain unverified, with evidence for each result.**
+- JSON validation for criteria, checks, timeouts, environment values, and Playwright scenarios.
+- Fresh detached worktree per check, pinned to the resolved commit.
+- Shell command checks and Playwright browser checks.
+- `passed`, `failed`, and `unverified` result states, with CI-friendly exit codes.
+- Bounded check duration and captured output; source changes and revision movement prevent a check from passing.
+- JSON and Markdown reports, captured evidence, and a SHA-256 artifact manifest.
+- Browser screenshots, browser diagnostics, and an exact-commit marker requirement for passing browser checks.
+- Example configuration and GitHub Actions workflow.
 
-### Epic 1: Acceptance contract
+Not implemented: OS-level sandboxing, a dedicated GitHub Action, API-check adapters, automatic package publishing, and formal schema compatibility guarantees. The checks run with the host user's privileges; do not run untrusted repository code with this tool.
 
-- Define a versioned, machine-readable format for criteria, checks, timeouts, environment, and evidence requirements.
-- Validate IDs, references, and configuration before execution.
-- Preserve criteria with no associated check as `unverified`.
-- MVP status: v1 JSON contract implemented; field-level validation now aggregates errors, with bounded timeout and environment validation.
+## Next: safer adoption
 
-### Epic 2: Independent execution
+- Add explicit documentation and checks for what environment variables are passed to verification commands.
+- Provide a reviewed GitHub Action or reusable workflow that can run with narrowly scoped permissions.
+- Improve evidence retention and redaction controls while making clear that output redaction cannot guarantee secret removal.
+- Add test coverage for supported operating systems and document platform-specific process termination behavior.
 
-- Resolve and record an exact commit.
-- Run checks from a clean detached worktree, with bounded runtime and captured output.
-- Distinguish command failure from setup errors, timeouts, and checks that could not run.
-- MVP status: each check runs in a fresh detached worktree at the requested commit; tracked/untracked mutations invalidate passing evidence, and timeouts terminate the process tree where supported. OS-level sandboxing remains out of scope.
+## Later: stable integration contract
 
-### Epic 3: Application behavior checks
+- Publish a formal JSON Schema for configuration and reports.
+- Define compatibility guarantees before a 1.0 release.
+- Add additional check adapters only when their revision binding and evidence semantics are clear.
+- Evaluate real sandbox backends before supporting checks from untrusted pull requests.
 
-- Support browser scenarios that assert observable application outcomes.
-- Capture screenshots, console errors, and relevant network failures.
-- Design an adapter interface for additional check types such as API checks.
-- MVP status: first-class Playwright scenario checks support browser actions and assertions, capture viewport screenshots, report console/page/network diagnostics, and require an app-exposed full commit marker before passing.
+## Project principles
 
-### Epic 4: Revision and evidence binding
-
-- Bind each result to repository identity, full commit SHA, config, and run.
-- Detect stale evidence and avoid presenting diffs as behavioral proof.
-- Store evidence with a manifest that connects artifacts to criteria and checks.
-- MVP status: report records tool version, repository name, commit SHA, config hash, runtime metadata, criterion mapping, and bounded stdout/stderr; manifest hashes reports and output evidence.
-
-### Epic 5: Completion report
-
-- Produce human-readable and machine-readable reports.
-- Report a criterion as passed only when its required checks pass; use failed for a failing check and unverified when proof is absent or incomplete.
-- Provide CI-friendly exit codes and concise failure summaries.
-- MVP status: JSON and Markdown reports, evidence manifest, captured output files, and exit codes implemented.
-
-### Epic 6: Adoption and integration
-
-- Ship a zero-dependency Node.js CLI with documented setup.
-- Support local development and CI without requiring a specific coding agent.
-- Add GitHub Actions guidance and publishing automation after package ownership is established.
-- MVP status: CLI scaffold and npm package metadata implemented; package not yet published.
-
-### Epic 7: Trust and operations
-
-- Clearly label what the evidence establishes and what remains an inference.
-- Keep secrets out of logs and artifacts; bound command duration and output.
-- Document execution privileges and offer a hardened isolation mode before accepting untrusted repositories.
-- MVP status: config, output, scenario, and diagnostic sizes are bounded; browser URL credentials and query strings are redacted in reports. Host execution is not sandboxed, and command output may contain secrets.
-
-## Release sequence
-
-1. **0.1 — Local proof runner:** JSON contract, exact-commit worktree, configured command checks, JSON report, exit codes.
-2. **0.2 — Usable evidence:** Markdown summary, improved schema errors, artifact manifest, reproducibility metadata, and integration examples. Implemented in this milestone.
-3. **0.3 — Browser behavior:** first-class Playwright adapter with screenshots and browser diagnostics. Implemented in this milestone.
-4. **0.4 — CI and hardening:** GitHub Action, configurable isolation backends, secret redaction, and operational limits.
-5. **1.0 — Stable public contract:** versioned schema guarantees, documented adapters, compatibility policy, and published package.
-
-## Success measures
-
-- Every report names the exact revision and verification contract.
-- Every criterion has an explicit status and evidence or a reason evidence is missing.
-- A report is reproducible against the same revision and configuration.
-- The same core engine works locally and in CI without a particular coding agent.
-- Setup and infrastructure failures never become passing results.
-
-## Product risks and decisions
-
-- A Git worktree isolates the revision, not process privileges. Running repository scripts requires trust or a real sandbox.
-- Check strength varies. A passing unit test is evidence only for what it tests; reports must not overclaim end-to-end behavior.
-- Keep the core check contract small and extensible instead of binding the product to one test framework or agent.
-- Resolve npm package ownership and repository URL before the first public release.
+- A completion claim is not evidence; only configured checks determine results.
+- A check proves only the behavior it exercises.
+- Missing, failed, timed-out, or unbound evidence cannot count as a pass.
+- A Git worktree isolates files and revision state, not process privileges.
+- Never claim that a passing report establishes production safety or full correctness.

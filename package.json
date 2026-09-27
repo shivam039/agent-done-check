@@ -1,14 +1,14 @@
 {
-  "name": "commitproof-cli",
+  "name": "agent-done-check",
   "version": "0.3.0",
-  "description": "Independent, commit-bound verification reports for software changes",
+  "description": "Commit-bound acceptance checks for agent-assisted software changes",
   "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "commitproof": "bin/commitproof.js"
+    "agent-done-check": "bin/agent-done-check.js"
   },
   "files": [
     "bin",
@@ -16,12 +16,12 @@
     "README.md",
     "ROADMAP.md",
     "LICENSE",
-    "commitproof.example.json",
-    "commitproof.browser.example.json",
+    "agent-done-check.example.json",
+    "agent-done-check.browser.example.json",
     "examples"
   ],
   "scripts": {
-    "start": "node ./bin/commitproof.js",
+    "start": "node ./bin/agent-done-check.js",
     "test": "node --test"
   },
   "keywords": [
@@ -31,5 +31,5 @@
     "agent",
     "testing"
   ],
-  "homepage": "https://www.npmjs.com/package/commitproof-cli"
+  "homepage": "https://github.com/shivam039/agent-done-check"
 }

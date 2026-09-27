@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "timeoutMs": 120000,
+  "criteria": [
+    { "id": "test-suite", "description": "The project's automated tests pass." },
+    { "id": "lint", "description": "The project's lint check passes." }
+  ],
+  "checks": [
+    {
+      "id": "unit-tests",
+      "command": "npm ci && npm test",
+      "criteria": ["test-suite"]
+    },
+    {
+      "id": "lint-check",
+      "command": "npm ci && npm run lint",
+      "criteria": ["lint"]
+    }
+  ]
+}

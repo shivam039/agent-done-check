@@ -78,7 +78,7 @@ function verificationEnv(config, commit) {
   const env = { ...process.env, ...(config.env ?? {}) };
   for (const key of GIT_OVERRIDE_KEYS) delete env[key];
   env.GIT_NO_REPLACE_OBJECTS = '1';
-  env.COMMITPROOF_TARGET_COMMIT = commit;
+  env.AGENT_DONE_CHECK_TARGET_COMMIT = commit;
   return env;
 }
 
@@ -291,7 +291,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
   };
   const table = (values) => values.map(markdownText).join(' | ');
   const lines = [
-    '# CommitProof verification report', '',
+    '# Agent Done Check verification report', '',
     `**Result: ${report.status.toUpperCase()}**`, '',
     `- Repository: ${markdownCode(report.repository)}`,
     `- Commit: ${markdownCode(report.commit)}`,
@@ -324,7 +324,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
 }
 
 function usage() {
-  return `commitproof ${VERSION}\n\nUsage:\n  commitproof [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>]\n\nOptions:\n  --config          JSON verification contract (default: commitproof.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .commitproof/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --help            Show this help\n  --version         Show version\n`;
+  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --help            Show this help\n  --version         Show version\n`;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -333,7 +333,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (args.version) { console.log(VERSION); return; }
 
   const root = process.cwd();
-  const configPath = path.resolve(root, args.config ?? 'commitproof.json');
+  const configPath = path.resolve(root, args.config ?? 'agent-done-check.json');
   let configContents;
   try {
     const info = await stat(configPath);
@@ -347,7 +347,7 @@ export async function main(argv = process.argv.slice(2)) {
   try { config = JSON.parse(configContents); }
   catch (error) { throw new Error(`Invalid JSON in ${configPath}: ${error.message}`); }
   validate(config);
-  const output = path.resolve(root, args.output ?? '.commitproof/report.json');
+  const output = path.resolve(root, args.output ?? '.agent-done-check/report.json');
   const markdownOutput = path.resolve(root, args['markdown-output'] ?? path.join(path.dirname(output), 'report.md'));
   const manifestPath = path.join(path.dirname(output), 'manifest.json');
   if (new Set([output, markdownOutput, manifestPath, configPath]).size !== 4) {
@@ -357,7 +357,7 @@ export async function main(argv = process.argv.slice(2)) {
   const requested = args.commit ?? 'HEAD';
   const commit = await git(repository, 'rev-parse', '--verify', `${requested}^{commit}`);
   const repositoryName = path.basename(repository);
-  const checkout = await mkdtemp(path.join(tmpdir(), 'commitproof-'));
+  const checkout = await mkdtemp(path.join(tmpdir(), 'agent-done-check-'));
   const startedAt = new Date().toISOString();
   const runId = randomUUID();
   const configSha256 = sha256(configContents);
@@ -466,7 +466,7 @@ export async function main(argv = process.argv.slice(2)) {
       : criteria.some((item) => item.status === 'unverified') ? 'unverified' : 'passed';
     const report = {
       schemaVersion: 2,
-      tool: { name: 'commitproof', version: VERSION },
+      tool: { name: 'agent-done-check', version: VERSION },
       runId,
       status,
       repository: repositoryName,
