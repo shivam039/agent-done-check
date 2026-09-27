@@ -1145,6 +1145,16 @@ test('HTTP response header assertions run only after commit binding and keep val
       response.end(Buffer.alloc(1_048_577, 97));
       return;
     }
+    if (request.url === '/present' || request.url === '/missing-required' || request.url === '/slow-missing') {
+      response.setHeader('X-Empty', '');
+      if (request.url !== '/missing-required' && request.url !== '/slow-missing') response.setHeader('X-Service-Version', 'private-observed-value');
+      if (request.url === '/slow-missing') {
+        response.write(Buffer.alloc(4096, 97));
+        const timer = setTimeout(() => response.end('late-secret-body'), 3000);
+        response.on('close', () => clearTimeout(timer));
+        return;
+      }
+    }
     response.end('ok');
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -1187,6 +1197,43 @@ test('HTTP response header assertions run only after commit binding and keep val
     assert.ok(!sarif.includes(value));
     assert.ok(!junit.includes(value));
   }
+
+  const presenceConfig = {
+    version: 1,
+    criteria: [{ id: 'required', description: 'Required response header names are present.' }],
+    checks: ['/present', '/missing-required', '/slow-missing', '/unbound'].map((route) => ({
+      id: route.slice(1), type: 'http', url: `http://127.0.0.1:${port}${route}`,
+      requiredResponseHeaders: ['x-empty', 'X-Service-Version'], criteria: ['required'],
+      ...(route === '/present' ? { responseHeaders: { 'x-service-version': 'private-observed-value' } } : {}),
+    })),
+  };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(presenceConfig));
+  const presenceResult = await invokeAsync(root, ['--commit', targetCommit]);
+  assert.equal(presenceResult.code, 1);
+  const presenceChecks = Object.fromEntries(presenceResult.report.checks.map((check) => [check.id, check]));
+  assert.equal(presenceChecks.present.status, 'passed');
+  assert.deepEqual(presenceChecks.present.http.responseHeadersPresent, { 'x-empty': true, 'x-service-version': true });
+  assert.equal(presenceChecks['missing-required'].status, 'failed');
+  assert.deepEqual(presenceChecks['missing-required'].http.responseHeadersPresent, { 'x-empty': true, 'x-service-version': false });
+  assert.equal(presenceChecks['slow-missing'].http.bodyBytes, null, 'missing required header must short-circuit body reads');
+  assert.equal(presenceChecks.unbound.status, 'unverified');
+  assert.equal(presenceChecks.unbound.http.responseHeadersPresent, null);
+  assert.ok(!JSON.stringify(presenceResult.report).includes('private-observed-value'));
+  assert.ok(!JSON.stringify(presenceResult.report).includes('late-secret-body'));
+  const validatePresence = async () => {
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(presenceConfig));
+    return invoke(root, ['--validate']);
+  };
+  presenceConfig.checks[0].requiredResponseHeaders = ['x-mode', 'X-Mode'];
+  assert.equal((await validatePresence()).code, 2);
+  presenceConfig.checks[0].requiredResponseHeaders = Array.from({ length: 21 }, (_, index) => `x-h-${index}`);
+  assert.equal((await validatePresence()).code, 2);
+  presenceConfig.checks[0].requiredResponseHeaders = ['bad name'];
+  assert.equal((await validatePresence()).code, 2);
+  presenceConfig.checks[0].requiredResponseHeaders = ['x-mode'];
+  presenceConfig.checks[0].type = 'command';
+  presenceConfig.checks[0].command = 'node --version';
+  assert.equal((await validatePresence()).code, 2);
 
   const validateConfig = async () => {
     await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));

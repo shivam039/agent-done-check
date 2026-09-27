@@ -158,10 +158,22 @@ PRD: [`docs/PRD-0.27.0-argv-commands.md`](./docs/PRD-0.27.0-argv-commands.md)
 
 - Let command checks pass program and arguments directly without a shell.
 
-## Current release work: 0.28.0 — Multiple expected command exit codes
+## Completed: 0.28.0 — Multiple expected command exit codes
 
 PRD: [`docs/PRD-0.28.0-command-exit-code-list.md`](./docs/PRD-0.28.0-command-exit-code-list.md)
 
 - Accept a bounded list of successful exit codes for command checks.
+
+## Completed: 0.29.0 — Required HTTP response headers
+
+PRD: [`docs/PRD-0.29.0-http-required-headers.md`](./docs/PRD-0.29.0-http-required-headers.md)
+
+- Assert that selected response header names are present after commit binding.
+
+## Current release work: 0.30.0 — Structured HTTP response checks
+
+PRD: [`docs/PRD-0.30.0-http-content-type.md`](./docs/PRD-0.30.0-http-content-type.md)
+
+- Validate an HTTP response media type after commit binding and before reading its body.
 
 ## Later
