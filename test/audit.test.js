@@ -195,6 +195,64 @@ test('command output substring assertions report pass, fail, and truncated uncer
   assert.match(invalid.stdout, /stdoutContains.*only for command checks/);
 });
 
+test('command working directories stay inside the isolated worktree', async (t) => {
+  const root = await repository(t);
+  const outside = await mkdtemp(path.join(tmpdir(), 'agent-done-check-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  const config = {
+    version: 1,
+    criteria: [{ id: 'working-directory', description: 'Commands run from the configured committed directory.' }],
+    checks: [
+      { id: 'default-root', command: nodeCommand('if (process.cwd() !== process.env.INIT_CWD) process.exit(9)'), criteria: ['working-directory'] },
+      { id: 'nested', command: nodeCommand('if (!require("node:fs").existsSync("marker.txt")) process.exit(9)'), workingDirectory: 'packages/api', criteria: ['working-directory'] },
+      { id: 'missing', command: nodeCommand('process.exit(0)'), workingDirectory: 'missing', criteria: ['working-directory'] },
+      { id: 'file', command: nodeCommand('process.exit(0)'), workingDirectory: 'marker.txt', criteria: ['working-directory'] },
+      { id: 'escape', command: nodeCommand('process.exit(0)'), workingDirectory: 'outside', criteria: ['working-directory'] },
+    ],
+  };
+  // INIT_CWD is intentionally not inherited. The default-root command instead checks the config-relative path evidence below.
+  config.checks[0].command = nodeCommand('if (!require("node:fs").existsSync("agent-done-check.json")) process.exit(9)');
+  try { await symlink(outside, path.join(root, 'outside')); }
+  catch (error) {
+    if (process.platform === 'win32') { t.skip(`Directory symlinks unavailable: ${error.message}`); return; }
+    throw error;
+  }
+  await commitFiles(root, {
+    'agent-done-check.json': JSON.stringify(config),
+    'marker.txt': 'root marker',
+    'packages/api/marker.txt': 'nested marker',
+  });
+  const result = await invoke(root);
+  assert.equal(result.code, 1);
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  const checks = Object.fromEntries(report.checks.map((check) => [check.id, check]));
+  assert.equal(checks['default-root'].status, 'passed');
+  assert.equal(checks.nested.status, 'passed');
+  assert.equal(checks.missing.status, 'unverified');
+  assert.equal(checks.file.status, 'unverified');
+  assert.equal(checks.escape.status, 'unverified');
+  assert.equal(checks.nested.workingDirectory, 'packages/api');
+  assert.equal(checks['default-root'].workingDirectory, '.');
+  assert.ok(!JSON.stringify(report).includes(outside));
+
+  for (const workingDirectory of ['../outside', '/tmp/outside', 'packages//api']) {
+    config.checks[0].workingDirectory = workingDirectory;
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    const invalid = await invoke(root, ['--validate']);
+    assert.equal(invalid.code, 2, workingDirectory);
+    assert.match(invalid.stdout, /workingDirectory/);
+  }
+  config.checks[0].type = 'file';
+  config.checks[0].path = 'marker.txt';
+  config.checks[0].assertion = 'exists';
+  delete config.checks[0].workingDirectory;
+  config.checks[0].workingDirectory = 'packages/api';
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const invalidType = await invoke(root, ['--validate']);
+  assert.equal(invalidType.code, 2);
+  assert.match(invalidType.stdout, /workingDirectory.*only for command checks/);
+});
+
 test('file checks verify exact committed bytes with bounded redacted evidence', async (t) => {
   const root = await repository(t);
   const content = 'release=0.6\n';

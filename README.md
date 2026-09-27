@@ -127,3 +127,7 @@ Command checks pass on exit code 0 by default. Set `expectedExitCode` on a comma
 ### Command output assertions
 
 Command checks may set `stdoutContains` or `stderrContains` to a non-empty substring of at most 4096 characters. The report records only whether each assertion matched; it does not record the configured text. If a substring is absent from complete captured output the check fails. If it is absent from truncated output, the check is unverified because the missing prefix was not observed. Matches are evaluated before report redaction.
+
+### Command working directory
+
+Command checks start at the isolated worktree root by default. Set `workingDirectory` to a normalized relative directory such as `packages/api` to run from a committed subdirectory. Absolute paths, traversal, missing directories, files, and symlinks resolving outside the worktree are rejected or reported unverified. Reports record the relative directory, never its host absolute path.

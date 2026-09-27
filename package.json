@@ -1,6 +1,6 @@
 {
   "name": "agent-done-check",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Commit-bound acceptance checks for agent-assisted software changes",
   "license": "MIT",
   "type": "module",
@@ -31,7 +31,8 @@
     "docs/PRD-0.10.0-sarif-export.md",
     "docs/PRD-0.11.0-junit-export.md",
     "docs/PRD-0.12.0-expected-exit-code.md",
-    "docs/PRD-0.13.0-command-output-assertions.md"
+    "docs/PRD-0.13.0-command-output-assertions.md",
+    "docs/PRD-0.14.0-command-working-directory.md"
   ],
   "scripts": {
     "start": "node ./bin/agent-done-check.js",

@@ -68,11 +68,17 @@ PRD: [`docs/PRD-0.12.0-expected-exit-code.md`](./docs/PRD-0.12.0-expected-exit-c
 
 - Allow command checks to pass on a selected process exit code while preserving timeout semantics.
 
-## Current release work: 0.13.0 — Command output assertions
+## Completed: 0.13.0 — Command output assertions
 
 PRD: [`docs/PRD-0.13.0-command-output-assertions.md`](./docs/PRD-0.13.0-command-output-assertions.md)
 
 - Add safe stdout/stderr substring assertions with explicit bounded-capture semantics.
+
+## Current release work: 0.14.0 — Command working directories
+
+PRD: [`docs/PRD-0.14.0-command-working-directory.md`](./docs/PRD-0.14.0-command-working-directory.md)
+
+- Let command checks run from a committed subdirectory of the isolated worktree.
 
 ## Later
 

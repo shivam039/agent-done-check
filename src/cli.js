@@ -547,6 +547,10 @@ function validate(config) {
       if (checkType !== 'command') errors.push(`${at}.${field}: is supported only for command checks.`);
       if (typeof check[field] !== 'string' || !check[field].length || check[field].length > 4096) errors.push(`${at}.${field}: must be a non-empty string of at most 4096 characters.`);
     }
+    if (typeof check.workingDirectory !== 'undefined') {
+      if (checkType !== 'command') errors.push(`${at}.workingDirectory: is supported only for command checks.`);
+      if (typeof check.workingDirectory !== 'string' || !check.workingDirectory.trim() || check.workingDirectory.includes('\0') || path.isAbsolute(check.workingDirectory) || path.win32.isAbsolute(check.workingDirectory) || path.win32.parse(check.workingDirectory).root || check.workingDirectory.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.workingDirectory: must be a normalized relative directory inside the verified worktree.`);
+    }
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
       if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
@@ -801,11 +805,29 @@ export async function main(argv = process.argv.slice(2)) {
           }
         } else {
           const [shell, shellArgs] = shellFor(check.command);
-          result = await run(shell, shellArgs, {
-            cwd: worktree,
+          let commandCwd = worktree;
+          if (check.workingDirectory) {
+            const requestedDirectory = path.resolve(worktree, check.workingDirectory);
+            try {
+              const resolvedWorktree = await realpath(worktree);
+              const resolvedDirectory = await realpath(requestedDirectory);
+              const relativeDirectory = path.relative(resolvedWorktree, resolvedDirectory);
+              if (relativeDirectory === '..' || relativeDirectory.startsWith(`..${path.sep}`) || path.isAbsolute(relativeDirectory)) throw new Error('outside worktree');
+              if (!(await stat(resolvedDirectory)).isDirectory()) throw new Error('not a directory');
+              commandCwd = resolvedDirectory;
+            } catch {
+              result = { code: null, signal: null, stdout: '', stderr: '', stdoutTruncated: false, stderrTruncated: false, status: 'unverified', error: 'Configured working directory is missing, is not a directory, or resolves outside the isolated worktree.' };
+            }
+          }
+          if (!result) result = await run(shell, shellArgs, {
+            cwd: commandCwd,
             env: verificationEnv(config, commit),
             timeoutMs,
           });
+          if (result.status === 'unverified' && result.error) {
+            result.expectedExitCode = check.expectedExitCode ?? 0;
+            result.outputAssertions = { stdoutContainsMatched: null, stderrContainsMatched: null };
+          } else {
           result.expectedExitCode = check.expectedExitCode ?? 0;
           const stdoutContainsMatched = typeof check.stdoutContains === 'string' ? result.stdout.includes(check.stdoutContains) : null;
           const stderrContainsMatched = typeof check.stderrContains === 'string' ? result.stderr.includes(check.stderrContains) : null;
@@ -817,6 +839,7 @@ export async function main(argv = process.argv.slice(2)) {
           result.status = result.signal === 'TIMEOUT' ? 'unverified'
             : result.code !== result.expectedExitCode || assertionFailed ? 'failed'
               : assertionUnverified ? 'unverified' : 'passed';
+          }
         }
         redactResult(result, secretsToRedact);
         const mutation = await worktreeMutation(worktree, commit);
@@ -834,6 +857,7 @@ export async function main(argv = process.argv.slice(2)) {
           error: result.error,
           exitCode: result.code,
           expectedExitCode: (check.type ?? 'command') === 'command' ? check.expectedExitCode ?? 0 : undefined,
+          workingDirectory: (check.type ?? 'command') === 'command' ? check.workingDirectory ?? '.' : undefined,
           outputAssertions: result.outputAssertions,
           signal: result.signal,
           startedAt: checkStarted,
