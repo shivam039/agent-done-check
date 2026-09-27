@@ -555,6 +555,10 @@ function validate(config) {
       if (checkType !== 'command') errors.push(`${at}.maxOutputBytes: is supported only for command checks.`);
       if (!Number.isInteger(check.maxOutputBytes) || check.maxOutputBytes < 1024 || check.maxOutputBytes > 1_048_576) errors.push(`${at}.maxOutputBytes: must be an integer from 1024 to 1048576 bytes.`);
     }
+    if (typeof check.stdin !== 'undefined') {
+      if (checkType !== 'command') errors.push(`${at}.stdin: is supported only for command checks.`);
+      if (typeof check.stdin !== 'string' || check.stdin.length > 65_536) errors.push(`${at}.stdin: must be a string of at most 65536 characters.`);
+    }
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
       if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
@@ -827,6 +831,7 @@ export async function main(argv = process.argv.slice(2)) {
             cwd: commandCwd,
             env: verificationEnv(config, commit),
             timeoutMs,
+            input: check.stdin ?? '',
             outputLimit: check.maxOutputBytes ?? MAX_OUTPUT,
           });
           result.maxOutputBytes = check.maxOutputBytes ?? MAX_OUTPUT;

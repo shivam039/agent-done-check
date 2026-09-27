@@ -135,3 +135,7 @@ Command checks start at the isolated worktree root by default. Set `workingDirec
 ### Command output capture limit
 
 Each stdout and stderr stream keeps its final 24,000 bytes by default. Set command-only `maxOutputBytes` to an integer from 1024 to 1,048,576 to change that per-stream limit. Reports record the effective limit and whether either stream was truncated. Output substring assertions use captured bytes; an absent substring in truncated output remains unverified.
+
+### Command standard input
+
+Set command-only `stdin` to provide a text fixture of up to 65,536 characters. The runner writes the text to the command's standard input and closes the stream; omission preserves the existing empty-input/EOF behavior. The configured text is not recorded as a separate report field. Because a command can print what it reads, treat stdin contents as part of the trusted check configuration and use the usual output redaction controls.

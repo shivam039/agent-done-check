@@ -298,6 +298,47 @@ test('command output capture limits are per-stream, bounded, and reported', asyn
   assert.match(invalidType.stdout, /maxOutputBytes.*only for command checks/);
 });
 
+test('command stdin supplies bounded text and defaults to empty EOF', async (t) => {
+  const root = await repository(t);
+  const fixture = 'private-fixture-value-0.16-🐈';
+  const config = {
+    version: 1,
+    criteria: [{ id: 'stdin', description: 'Command input fixtures are consumed as configured.' }],
+    checks: [
+      { id: 'provided', command: nodeCommand(`let input = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => { if (input !== ${JSON.stringify(fixture)}) process.exitCode = 9; else console.log('fixture-consumed'); });`), stdin: fixture, criteria: ['stdin'] },
+      { id: 'eof', command: nodeCommand('process.stdin.resume(); process.stdin.on("end", () => console.log("empty-eof"))'), criteria: ['stdin'] },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.ok(report.checks.every((check) => check.status === 'passed'));
+  assert.ok(!JSON.stringify(report).includes(fixture));
+  assert.ok(!Object.hasOwn(report.checks[0], 'stdin'));
+  assert.match(report.checks[0].stdout, /fixture-consumed/);
+  assert.match(report.checks[1].stdout, /empty-eof/);
+
+  config.checks[0].stdin = 'x'.repeat(65_536);
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  assert.equal((await invoke(root, ['--validate'])).code, 0);
+  for (const stdin of ['x'.repeat(65_537), 7, null]) {
+    config.checks[0].stdin = stdin;
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    const invalid = await invoke(root, ['--validate']);
+    assert.equal(invalid.code, 2);
+    assert.match(invalid.stdout, /stdin/);
+  }
+  config.checks[0].type = 'file';
+  config.checks[0].path = 'agent-done-check.json';
+  config.checks[0].assertion = 'exists';
+  config.checks[0].stdin = 'not allowed here';
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const invalidType = await invoke(root, ['--validate']);
+  assert.equal(invalidType.code, 2);
+  assert.match(invalidType.stdout, /stdin.*only for command checks/);
+});
+
 test('file checks verify exact committed bytes with bounded redacted evidence', async (t) => {
   const root = await repository(t);
   const content = 'release=0.6\n';

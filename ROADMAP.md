@@ -80,11 +80,17 @@ PRD: [`docs/PRD-0.14.0-command-working-directory.md`](./docs/PRD-0.14.0-command-
 
 - Let command checks run from a committed subdirectory of the isolated worktree.
 
-## Current release work: 0.15.0 — Command output capture limits
+## Completed: 0.15.0 — Command output capture limits
 
 PRD: [`docs/PRD-0.15.0-command-output-limits.md`](./docs/PRD-0.15.0-command-output-limits.md)
 
 - Make the per-stream command output capture limit configurable within a strict bound.
+
+## Current release work: 0.16.0 — Command standard input
+
+PRD: [`docs/PRD-0.16.0-command-stdin.md`](./docs/PRD-0.16.0-command-stdin.md)
+
+- Let command checks consume bounded text fixtures through stdin.
 
 ## Later
 
