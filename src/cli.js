@@ -30,6 +30,7 @@ const PROTECTED_ENV_KEYS = new Set([
   'ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_RESULTS_URL', 'ACTIONS_CACHE_URL', 'ACTIONS_RUNTIME_URL',
   'NODE_AUTH_TOKEN', 'NPM_TOKEN',
 ]);
+const CONTROLLED_ENV_KEYS = new Set([...GIT_OVERRIDE_KEYS, 'GIT_NO_REPLACE_OBJECTS', 'AGENT_DONE_CHECK_TARGET_COMMIT']);
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -85,16 +86,31 @@ function shellFor(command) {
     : ['/bin/sh', ['-lc', command]];
 }
 
-function verificationEnv(config, commit) {
+function setEnvironmentValue(env, key, value) {
+  if (process.platform === 'win32') {
+    const existing = Object.keys(env).find((name) => name.toLowerCase() === key.toLowerCase());
+    if (existing) delete env[existing];
+  }
+  env[key] = value;
+}
+
+function removeEnvironmentKeys(env, keys) {
+  const blocked = new Set([...keys].map((key) => key.toUpperCase()));
+  for (const key of Object.keys(env)) if (blocked.has(key.toUpperCase())) delete env[key];
+}
+
+function verificationEnv(config, commit, check) {
   const normalizeKey = (key) => process.platform === 'win32' ? key.toLowerCase() : key;
   const allowedKeys = new Set([...BASE_ENV_KEYS, ...(config.inheritEnv ?? [])]
     .filter((key) => !PROTECTED_ENV_KEYS.has(key.toUpperCase()))
     .map(normalizeKey));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowedKeys.has(process.platform === 'win32' ? key.toLowerCase() : key)));
-  Object.assign(env, config.env ?? {});
-  for (const key of GIT_OVERRIDE_KEYS) delete env[key];
-  env.GIT_NO_REPLACE_OBJECTS = '1';
-  env.AGENT_DONE_CHECK_TARGET_COMMIT = commit;
+  const env = Object.create(null);
+  for (const [key, value] of Object.entries(process.env)) if (allowedKeys.has(normalizeKey(key))) setEnvironmentValue(env, key, value);
+  for (const [key, value] of Object.entries(config.env ?? {})) setEnvironmentValue(env, key, value);
+  for (const [key, value] of Object.entries(check?.env ?? {})) setEnvironmentValue(env, key, value);
+  removeEnvironmentKeys(env, CONTROLLED_ENV_KEYS);
+  setEnvironmentValue(env, 'GIT_NO_REPLACE_OBJECTS', '1');
+  setEnvironmentValue(env, 'AGENT_DONE_CHECK_TARGET_COMMIT', commit);
   return env;
 }
 
@@ -108,7 +124,16 @@ function redactionValues(config) {
       ? Object.entries(process.env).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1]
       : undefined);
     add(hostValue);
-    add(config.env?.[key]);
+    const globalValue = process.platform === 'win32'
+      ? Object.entries(config.env ?? {}).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1]
+      : config.env?.[key];
+    add(globalValue);
+    for (const check of config.checks ?? []) {
+      const checkValue = process.platform === 'win32'
+        ? Object.entries(check.env ?? {}).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1]
+        : check.env?.[key];
+      add(checkValue);
+    }
   }
   for (const check of config.checks ?? []) for (const step of check.steps ?? []) add(step.value);
   return [...values].sort((a, b) => b.length - a.length);
@@ -577,6 +602,21 @@ function validate(config) {
       if (checkType !== 'command') errors.push(`${at}.stdin: is supported only for command checks.`);
       if (typeof check.stdin !== 'string' || characterCount(check.stdin) > 65_536) errors.push(`${at}.stdin: must be a string of at most 65536 characters.`);
     }
+    if (typeof check.env !== 'undefined') {
+      if (checkType !== 'command') errors.push(`${at}.env: is supported only for command checks.`);
+      if (!check.env || typeof check.env !== 'object' || Array.isArray(check.env)) errors.push(`${at}.env: must be an object of string values.`);
+      else {
+        const envKeys = new Set();
+        for (const [key, value] of Object.entries(check.env)) {
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) errors.push(`${at}.env.${key}: invalid environment variable name.`);
+          const normalizedKey = process.platform === 'win32' ? key.toLowerCase() : key;
+          if (envKeys.has(normalizedKey)) errors.push(`${at}.env: duplicate environment variable name ${JSON.stringify(key)}.`);
+          envKeys.add(normalizedKey);
+          if (typeof value !== 'string') errors.push(`${at}.env.${key}: value must be a string.`);
+          if (CONTROLLED_ENV_KEYS.has(key.toUpperCase())) errors.push(`${at}.env.${key}: runner-controlled variable cannot be set per check.`);
+        }
+      }
+    }
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
       if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
@@ -864,7 +904,7 @@ export async function main(argv = process.argv.slice(2)) {
           }
           if (!result) result = await run(shell, shellArgs, {
             cwd: commandCwd,
-            env: verificationEnv(config, commit),
+            env: verificationEnv(config, commit, check),
             timeoutMs,
             input: check.stdin ?? '',
             outputLimit: check.maxOutputBytes ?? MAX_OUTPUT,

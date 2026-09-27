@@ -141,3 +141,7 @@ Each stdout and stderr stream keeps its final 24,000 bytes by default. Set comma
 ### Command standard input
 
 Set command-only `stdin` to provide a text fixture of up to 65,536 characters. The runner writes the text to the command's standard input and closes the stream; omission preserves the existing empty-input/EOF behavior. The configured text is not recorded as a separate report field. Because a command can print what it reads, treat stdin contents as part of the trusted check configuration and use the usual output redaction controls.
+
+### Per-check command environment
+
+Set a command check's `env` object to add or override string values for that check only. Values merge after the global `env` object, while host values still come only from the `inheritEnv` allowlist. Add a variable name to `redactEnv` to mask both global and per-check values in output; exact-value masking applies to values at least four characters long. Git override and runner target marker variables cannot be set per check.

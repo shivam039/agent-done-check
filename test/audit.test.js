@@ -223,6 +223,67 @@ test('selected checks preserve config order and leave omitted criteria unverifie
   assert.equal(completeReport.checkSelection, null);
 });
 
+test('per-check command environments override local values without expanding host inheritance', async (t) => {
+  const root = await repository(t);
+  const hostVariable = 'AGENT_DONE_CHECK_PER_CHECK_HOST_TEST';
+  const priorHostValue = process.env[hostVariable];
+  process.env[hostVariable] = 'host-only-value';
+  t.after(() => {
+    if (typeof priorHostValue === 'undefined') delete process.env[hostVariable];
+    else process.env[hostVariable] = priorHostValue;
+  });
+  const config = {
+    version: 1,
+    env: { SHARED_VALUE: 'global-value', PRIVATE_VALUE: 'global-private-value' },
+    redactEnv: ['PRIVATE_VALUE'],
+    criteria: [{ id: 'environment', description: 'Each command receives its scoped environment.' }],
+    checks: [
+      {
+        id: 'override',
+        command: nodeCommand('if (process.env.SHARED_VALUE !== "local-value" || process.env.LOCAL_ONLY !== "only-here" || process.env.AGENT_DONE_CHECK_PER_CHECK_HOST_TEST !== "local-marker") process.exit(9); process.stdout.write(process.env.PRIVATE_VALUE)'),
+        env: { SHARED_VALUE: 'local-value', LOCAL_ONLY: 'only-here', PRIVATE_VALUE: 'local-private-value', [hostVariable]: 'local-marker' },
+        criteria: ['environment'],
+      },
+      {
+        id: 'global-only',
+        command: nodeCommand('if (process.env.SHARED_VALUE !== "global-value" || process.env.LOCAL_ONLY !== undefined || process.env.AGENT_DONE_CHECK_PER_CHECK_HOST_TEST !== undefined) process.exit(9); process.stdout.write(process.env.PRIVATE_VALUE)'),
+        criteria: ['environment'],
+      },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.ok(report.checks.every((check) => check.status === 'passed'));
+  assert.equal(report.checks[0].stdout, '[REDACTED]');
+  assert.equal(report.checks[1].stdout, '[REDACTED]');
+  assert.doesNotMatch(JSON.stringify(report), /local-private-value|global-private-value|host-only-value/);
+
+  for (const env of [null, [], { 'BAD-NAME': 'value' }, { VALUE: 7 }, { GIT_DIR: 'override' }, { GIT_NO_REPLACE_OBJECTS: '0' }, { AGENT_DONE_CHECK_TARGET_COMMIT: 'other' }]) {
+    config.checks[0].env = env;
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    const invalid = await invoke(root, ['--validate']);
+    assert.equal(invalid.code, 2, JSON.stringify(env));
+    assert.match(invalid.stdout, /checks\[0\]\.env/);
+  }
+  if (process.platform === 'win32') {
+    config.checks[0].env = { VALUE: 'upper', value: 'lower' };
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    const duplicateCase = await invoke(root, ['--validate']);
+    assert.equal(duplicateCase.code, 2);
+    assert.match(duplicateCase.stdout, /duplicate environment variable/);
+  }
+  config.checks[0].type = 'file';
+  config.checks[0].path = 'agent-done-check.json';
+  config.checks[0].assertion = 'exists';
+  config.checks[0].env = { LOCAL_ONLY: 'value' };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const invalidType = await invoke(root, ['--validate']);
+  assert.equal(invalidType.code, 2);
+  assert.match(invalidType.stdout, /checks\[0\]\.env.*only for command checks/);
+});
+
 test('command output substring assertions report pass, fail, and truncated uncertainty', async (t) => {
   const root = await repository(t);
   const config = {
