@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/shivam039/agent-done-check/blob/main/schemas/manifest-v1.schema.json",
+  "title": "Agent Done Check evidence manifest schema v1",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "commit", "config", "artifacts"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runId": { "type": "string", "format": "uuid" },
+    "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "config": { "type": "object", "required": ["path", "sha256"], "properties": { "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" } }, "additionalProperties": true },
+    "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "artifact": { "type": "object", "required": ["role", "path", "sha256", "bytes", "mediaType"], "properties": { "role": { "type": "string" }, "checkId": { "type": "string" }, "stream": { "type": "string" }, "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" }, "bytes": { "type": "integer", "minimum": 0 }, "mediaType": { "type": "string" } }, "additionalProperties": true }
+  }
+}

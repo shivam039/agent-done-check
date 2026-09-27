@@ -11,6 +11,7 @@
     {
       "id": "sign-in-browser",
       "type": "playwright",
+      "criteria": ["sign-in-flow"],
       "url": "https://staging.example.com/login",
       "browser": "chromium",
       "commitAssertion": {

@@ -1,6 +1,6 @@
 {
   "name": "agent-done-check",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Commit-bound acceptance checks for agent-assisted software changes",
   "license": "MIT",
   "type": "module",
@@ -15,6 +15,9 @@
     "src",
     "README.md",
     "ROADMAP.md",
+    "schemas",
+    "docs/compatibility.md",
+    "docs/PRD-0.5.0-stable-integration-contract.md",
     "LICENSE",
     "agent-done-check.example.json",
     "agent-done-check.browser.example.json",
@@ -31,5 +34,9 @@
     "agent",
     "testing"
   ],
-  "homepage": "https://github.com/shivam039/agent-done-check"
+  "homepage": "https://github.com/shivam039/agent-done-check",
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  }
 }

@@ -14,13 +14,21 @@ Implemented:
 
 Redaction is best-effort. It cannot reliably identify transformed secrets or data in screenshots. Checks remain unsandboxed and run with the host user's privileges; do not run untrusted verification configs or grant untrusted code access to sensitive variables.
 
-## Next: stable integration contract
+## Current release work: 0.5.0 — Stable integration contract
 
-- Publish formal JSON Schemas for config, reports, and manifests.
-- Define compatibility guarantees and a migration policy before 1.0.
+PRD: [`docs/PRD-0.5.0-stable-integration-contract.md`](./docs/PRD-0.5.0-stable-integration-contract.md)
+
+- Publish JSON Schemas for config v1, report schema v2, and manifest schema v1.
+- Document pre-1.0 compatibility, deprecation, and migration policy.
+- Validate examples and generated report/manifest output against the schemas in tests.
+
+## Later
+
 - Add check adapters only when their revision binding and evidence semantics are clear.
 - Evaluate an OS-level sandbox before supporting checks from untrusted repositories.
 - Publish the npm package only after the package name and release process are confirmed.
+
+The project remains pre-1.0; see [`docs/compatibility.md`](./docs/compatibility.md) for contract evolution policy.
 
 ## Project principles
 

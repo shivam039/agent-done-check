@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/shivam039/agent-done-check/blob/main/schemas/config-v1.schema.json",
+  "title": "Agent Done Check configuration v1",
+  "description": "Verification criteria and command or Playwright checks accepted by Agent Done Check config version 1.",
+  "type": "object",
+  "required": ["version", "criteria", "checks"],
+  "properties": {
+    "version": { "const": 1 },
+    "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 1800000 },
+    "env": { "type": "object", "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }, "additionalProperties": { "type": "string" } },
+    "inheritEnv": { "$ref": "#/$defs/environmentNames" },
+    "redactEnv": { "$ref": "#/$defs/environmentNames" },
+    "criteria": { "type": "array", "minItems": 1, "maxItems": 500, "items": { "$ref": "#/$defs/criterion" } },
+    "checks": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "$ref": "#/$defs/check" } }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "environmentNames": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
+    "criterion": {
+      "type": "object",
+      "required": ["id", "description"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "description": { "type": "string", "minLength": 1 } },
+      "additionalProperties": true
+    },
+    "step": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": { "enum": ["click", "fill", "check", "uncheck", "selectOption", "press", "expectVisible", "expectHidden", "expectText", "expectValue", "expectUrl"] },
+        "selector": { "type": "string", "minLength": 1 },
+        "value": { "type": "string" },
+        "exact": { "type": "boolean" }
+      },
+      "allOf": [
+        { "if": { "properties": { "action": { "const": "expectUrl" } }, "required": ["action"] }, "then": { "properties": { "value": {} }, "required": ["value"] }, "else": { "properties": { "selector": {} }, "required": ["selector"] } },
+        { "if": { "properties": { "action": { "enum": ["fill", "selectOption", "press", "expectText", "expectValue"] } }, "required": ["action"] }, "then": { "properties": { "value": {} }, "required": ["value"] } }
+      ],
+      "additionalProperties": true
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "criteria"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["command", "playwright"] },
+        "criteria": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 1800000 },
+        "command": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri", "pattern": "^https?://" },
+        "browser": { "enum": ["chromium", "firefox", "webkit"] },
+        "commitAssertion": {
+          "type": "object",
+          "required": ["selector"],
+          "properties": { "selector": { "type": "string", "minLength": 1 }, "attribute": { "type": "string", "minLength": 1 } },
+          "additionalProperties": true
+        },
+        "setupCommand": { "type": "string", "minLength": 1 },
+        "steps": { "type": "array", "minItems": 1, "maxItems": 500, "items": { "$ref": "#/$defs/step" } },
+        "waitUntil": { "enum": ["load", "domcontentloaded", "networkidle", "commit"] },
+        "failOnPageError": { "type": "boolean" },
+        "failOnConsoleError": { "type": "boolean" },
+        "failOnRequestFailure": { "type": "boolean" },
+        "failOnHttpError": { "type": "boolean" },
+        "screenshot": { "type": "boolean" },
+        "viewport": { "type": "object", "required": ["width", "height"], "properties": { "width": { "type": "integer", "minimum": 1, "maximum": 16384 }, "height": { "type": "integer", "minimum": 1, "maximum": 16384 } }, "additionalProperties": true }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "playwright" } }, "required": ["type"] }, "then": { "properties": { "url": {}, "steps": {} }, "required": ["url", "steps"] }, "else": { "properties": { "command": {} }, "required": ["command"] } }
+      ],
+      "additionalProperties": true
+    }
+  }
+}
