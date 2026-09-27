@@ -2,7 +2,10 @@
   "version": 1,
   "timeoutMs": 10000,
   "criteria": [
-    { "id": "deployment", "description": "The deployment serves the verified commit and expected health response." }
+    {
+      "id": "deployment",
+      "description": "The deployment serves the verified commit and expected health response."
+    }
   ],
   "checks": [
     {
@@ -11,7 +14,10 @@
       "url": "https://example.invalid/health",
       "expectedStatus": 200,
       "bodyContains": "healthy",
-      "criteria": ["deployment"]
+      "criteria": [
+        "deployment"
+      ],
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
 }

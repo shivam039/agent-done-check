@@ -110,24 +110,16 @@ PRD: [`docs/PRD-0.19.0-http-response-headers.md`](./docs/PRD-0.19.0-http-respons
 
 - Verify exact response header values only after the HTTP response is bound to the target commit.
 
-## Current release work: 0.20.0 — JSON Pointer file checks
+## Completed: 0.20.0 — JSON Pointer file checks
 
 PRD: [`docs/PRD-0.20.0-json-pointer-file-checks.md`](./docs/PRD-0.20.0-json-pointer-file-checks.md)
 
 - Compare typed JSON values at RFC 6901 pointers in committed files.
 
+## Current release work: 0.21.0 — HTTP response body digest assertions
+
+PRD: [`docs/PRD-0.21.0-http-body-digest.md`](./docs/PRD-0.21.0-http-body-digest.md)
+
+- Verify bounded raw HTTP response bytes by SHA-256 after commit binding.
+
 ## Later
-
-- Add check adapters only when their revision binding and evidence semantics are clear.
-- Evaluate an OS-level sandbox before supporting checks from untrusted repositories.
-- Publish the npm package only after the package name and release process are confirmed.
-
-The project remains pre-1.0; see [`docs/compatibility.md`](./docs/compatibility.md) for contract evolution policy.
-
-## Project principles
-
-- A completion claim is not evidence; only configured checks determine results.
-- A check proves only the behavior it exercises.
-- Missing, failed, timed-out, or unbound evidence cannot count as a pass.
-- A Git worktree isolates files and revision state, not process privileges.
-- Never claim that a passing report establishes production safety or full correctness.

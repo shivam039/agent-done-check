@@ -853,6 +853,7 @@ test('HTTP checks require exact commit binding and keep response content out of 
     if (request.url === '/failure') { response.writeHead(503); response.end('healthy'); return; }
     if (request.url === '/large') { response.end(Buffer.alloc(1_048_577, 97)); return; }
     if (request.url === '/binary') { response.end(Buffer.from([255, 254])); return; }
+    if (request.url === '/binary-bound') { response.setHeader('x-agent-done-check-commit', targetCommit); response.end(Buffer.from([255, 254, 0])); return; }
     response.end('healthy response');
   });
   let targetCommit;
@@ -863,10 +864,11 @@ test('HTTP checks require exact commit binding and keep response content out of 
     version: 1,
     timeoutMs: 5000,
     criteria: [{ id: 'http', description: 'HTTP evidence is bound to the verified revision.' }],
-    checks: ['/ok', '/missing', '/mismatch', '/redirect', '/failure', '/large', '/binary', '/timeout'].map((route) => ({
+    checks: ['/ok', '/missing', '/mismatch', '/redirect', '/failure', '/large', '/binary', '/binary-bound', '/timeout'].map((route) => ({
       id: route.slice(1), type: 'http', url: `http://127.0.0.1:${port}${route}`,
       ...(route === '/failure' ? { expectedStatus: 200 } : route === '/ok' ? { bodyContains: 'healthy' } : {}),
       ...(route === '/binary' ? { bodyContains: 'text-only assertion' } : {}),
+      ...(route === '/binary-bound' ? { bodySha256: createHash('sha256').update(Buffer.from([255, 254, 0])).digest('hex') } : {}),
       ...(route === '/timeout' ? { timeoutMs: 1000 } : {}), criteria: ['http'],
     })),
   };
@@ -889,11 +891,59 @@ test('HTTP checks require exact commit binding and keep response content out of 
   assert.equal(checks.large.status, 'unverified');
   assert.equal(checks.large.http.bodyTruncated, true);
   assert.equal(checks.binary.status, 'unverified');
+  assert.equal(checks['binary-bound'].status, 'passed');
+  assert.equal(checks['binary-bound'].http.bodySha256Matched, true);
+  assert.equal(checks['binary-bound'].http.bodySha256, createHash('sha256').update(Buffer.from([255, 254, 0])).digest('hex'));
   assert.equal(checks.timeout.status, 'unverified');
   assert.match(checks.timeout.error, /timed out/);
   assert.ok(!JSON.stringify(report).includes('healthy response'));
   assert.ok(!JSON.stringify(report).includes('ghp_abcdefghijklmnopqrstuvwxyz123456789'));
   assert.ok(!JSON.stringify(report).includes('healthy'));
+  assert.ok(!JSON.stringify(report).includes(createHash('sha256').update(Buffer.from('not configured')).digest('hex')));
+});
+
+test('HTTP body digest assertions compare bounded raw bytes after binding and validate config', async (t) => {
+  const root = await repository(t);
+  let targetCommit;
+  const bytes = Buffer.from([0, 255, 128, 1]);
+  const expected = createHash('sha256').update(bytes).digest('hex');
+  const server = createServer((request, response) => {
+    if (request.url === '/unbound') { response.end(bytes); return; }
+    response.setHeader('x-agent-done-check-commit', targetCommit);
+    response.end(bytes);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const port = server.address().port;
+  const secretDigest = createHash('sha256').update(Buffer.from('private-config-value')).digest('hex');
+  const config = {
+    version: 1,
+    criteria: [{ id: 'digest', description: 'HTTP body digest matches.' }],
+    checks: [
+      { id: 'match', type: 'http', url: `http://127.0.0.1:${port}/match`, bodySha256: expected, criteria: ['digest'] },
+      { id: 'mismatch', type: 'http', url: `http://127.0.0.1:${port}/mismatch`, bodySha256: secretDigest, criteria: ['digest'] },
+      { id: 'unbound', type: 'http', url: `http://127.0.0.1:${port}/unbound`, bodySha256: expected, criteria: ['digest'] },
+    ],
+  };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', '.'); git(root, 'commit', '--quiet', '-m', 'HTTP digest config fixture');
+  targetCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const result = await invokeAsync(root, ['--commit', targetCommit]);
+  assert.equal(result.code, 1);
+  const checks = Object.fromEntries(result.report.checks.map((check) => [check.id, check]));
+  assert.equal(checks.match.status, 'passed');
+  assert.equal(checks.match.http.bodySha256Matched, true);
+  assert.equal(checks.mismatch.status, 'failed');
+  assert.equal(checks.mismatch.http.bodySha256Matched, false);
+  assert.equal(checks.unbound.status, 'unverified');
+  assert.equal(checks.unbound.http.bodySha256Matched, null);
+  assert.ok(!JSON.stringify(result.report).includes(secretDigest));
+  assert.ok(!JSON.stringify(result.report).includes(bytes.toString('base64')));
+
+  config.checks[0].bodySha256 = 'A'.repeat(64);
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const invalid = await invokeAsync(root, ['--validate-config']);
+  assert.equal(invalid.code, 2);
 });
 
 test('HTTP response header assertions run only after commit binding and keep values private', async (t) => {

@@ -478,7 +478,7 @@ async function runHttpCheck(commit, check, timeoutMs) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const evidence = { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null,
     commitHeader, revisionBinding: 'missing', bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null,
-    responseHeadersMatched: null };
+    responseHeadersMatched: null, bodySha256Matched: null };
   try {
     const response = await fetch(url, { method: 'GET', redirect: 'error', signal: controller.signal });
     evidence.statusCode = response.status;
@@ -521,7 +521,8 @@ async function runHttpCheck(commit, check, timeoutMs) {
       catch { return { status: 'unverified', error: 'The HTTP response body is not valid UTF-8 for bodyContains.', http: evidence }; }
       evidence.bodyContainsMatched = content.includes(check.bodyContains);
     }
-    const matched = response.status === evidence.expectedStatus && evidence.bodyContainsMatched !== false;
+    if (typeof check.bodySha256 === 'string') evidence.bodySha256Matched = evidence.bodySha256 === check.bodySha256;
+    const matched = response.status === evidence.expectedStatus && evidence.bodyContainsMatched !== false && evidence.bodySha256Matched !== false;
     return { status: matched ? 'passed' : 'failed', error: matched ? undefined : 'The bound HTTP response did not satisfy the configured assertion.', http: evidence };
   } catch {
     return { status: 'unverified', error: controller.signal.aborted ? 'The HTTP request timed out.' : 'The HTTP request could not be completed safely.', http: evidence };
@@ -531,7 +532,7 @@ async function runHttpCheck(commit, check, timeoutMs) {
 function unavailableHttpResult(check) {
   return { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null,
     commitHeader: (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase(), revisionBinding: 'missing',
-    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersMatched: null };
+    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersMatched: null, bodySha256Matched: null };
 }
 
 function sarifReport(report) {
@@ -669,6 +670,7 @@ function validate(config) {
       }
     }
     if (typeof check.responseHeaders !== 'undefined' && checkType !== 'http') errors.push(`${at}.responseHeaders: is supported only for HTTP checks.`);
+    if (typeof check.bodySha256 !== 'undefined' && checkType !== 'http') errors.push(`${at}.bodySha256: is supported only for HTTP checks.`);
     if (typeof check.pointer !== 'undefined' && (checkType !== 'file' || check.assertion !== 'jsonPointerEquals')) errors.push(`${at}.pointer: is supported only with the jsonPointerEquals file assertion.`);
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
@@ -688,6 +690,7 @@ function validate(config) {
       if (typeof check.expectedStatus !== 'undefined' && (!Number.isInteger(check.expectedStatus) || check.expectedStatus < 100 || check.expectedStatus > 599)) errors.push(`${at}.expectedStatus: must be an HTTP status integer from 100 to 599.`);
       if (typeof check.commitHeader !== 'undefined' && (typeof check.commitHeader !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(check.commitHeader))) errors.push(`${at}.commitHeader: must be a valid HTTP header name.`);
       if (typeof check.bodyContains !== 'undefined' && typeof check.bodyContains !== 'string') errors.push(`${at}.bodyContains: must be a string.`);
+      if (typeof check.bodySha256 !== 'undefined' && (typeof check.bodySha256 !== 'string' || !/^[a-f0-9]{64}$/.test(check.bodySha256))) errors.push(`${at}.bodySha256: must be a 64-character lowercase SHA-256 digest.`);
       if (typeof check.responseHeaders !== 'undefined') {
         if (!check.responseHeaders || typeof check.responseHeaders !== 'object' || Array.isArray(check.responseHeaders)) errors.push(`${at}.responseHeaders: must be an object of header names to expected string values.`);
         else {
@@ -799,7 +802,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
       const headerAssertions = check.http.responseHeadersMatched
         ? Object.entries(check.http.responseHeadersMatched).map(([name, matched]) => `${name} ${matched ? 'matched' : 'did not match'}`).join(', ')
         : '';
-      lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; commit binding ${check.http.revisionBinding}${headerAssertions ? `; response headers ${headerAssertions}` : ''}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
+      lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; commit binding ${check.http.revisionBinding}${headerAssertions ? `; response headers ${headerAssertions}` : ''}${check.http.bodySha256Matched === true ? '; body SHA-256 matched' : check.http.bodySha256Matched === false ? '; body SHA-256 did not match' : ''}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
     }
     if (check.browser?.diagnostics) {
       const diagnostics = check.browser.diagnostics;

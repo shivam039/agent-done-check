@@ -369,6 +369,10 @@
             }
           },
           "additionalProperties": true
+        },
+        "bodySha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
         }
       },
       "allOf": [
