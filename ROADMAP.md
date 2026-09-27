@@ -92,6 +92,12 @@ PRD: [`docs/PRD-0.16.0-command-stdin.md`](./docs/PRD-0.16.0-command-stdin.md)
 
 - Let command checks consume bounded text fixtures through stdin.
 
+## Current release work: 0.17.0 — Select checks for a focused run
+
+PRD: [`docs/PRD-0.17.0-select-checks.md`](./docs/PRD-0.17.0-select-checks.md)
+
+- Support repeatable check ID selection while keeping omitted criteria unverified.
+
 ## Later
 
 - Add check adapters only when their revision binding and evidence semantics are clear.

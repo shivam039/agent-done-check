@@ -154,6 +154,75 @@ test('command checks pass only on their configured expected exit code', async (t
   assert.match(invalidCode.stderr, /expectedExitCode/);
 });
 
+test('selected checks preserve config order and leave omitted criteria unverified', async (t) => {
+  const root = await repository(t);
+  const config = {
+    version: 1,
+    criteria: [
+      { id: 'shared', description: 'Both selected and omitted checks support this criterion.' },
+      { id: 'selected-only', description: 'Only one selected check supports this criterion.' },
+      { id: 'omitted-only', description: 'Only an omitted check supports this criterion.' },
+    ],
+    checks: [
+      { id: 'first', command: nodeCommand('console.log("first")'), criteria: ['shared', 'selected-only'] },
+      { id: 'second', command: nodeCommand('console.log("second")'), criteria: ['shared'] },
+      { id: 'omitted', command: nodeCommand('console.log("omitted")'), criteria: ['omitted-only'] },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+
+  const single = await invoke(root, ['--check', 'first']);
+  assert.equal(single.code, 1);
+  const singleReport = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  const singleCriteria = Object.fromEntries(singleReport.criteria.map((criterion) => [criterion.id, criterion]));
+  assert.equal(singleReport.status, 'unverified');
+  assert.equal(singleCriteria.shared.status, 'unverified');
+  assert.deepEqual(singleCriteria.shared.unrunChecks, ['second']);
+  assert.equal(singleCriteria['selected-only'].status, 'passed');
+  assert.deepEqual(singleCriteria['omitted-only'].unrunChecks, ['omitted']);
+
+  const focused = await invoke(root, ['--check', 'second', '--check', 'first', '--sarif-output', 'report.sarif', '--junit-output', 'report.xml']);
+  assert.equal(focused.code, 1);
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(report.status, 'unverified');
+  assert.deepEqual(report.checkSelection, ['first', 'second']);
+  assert.deepEqual(report.checks.map((check) => check.id), ['first', 'second']);
+  const criteria = Object.fromEntries(report.criteria.map((criterion) => [criterion.id, criterion]));
+  assert.equal(criteria.shared.status, 'passed');
+  assert.equal(criteria.shared.unrunChecks, undefined);
+  assert.equal(criteria['selected-only'].status, 'passed');
+  assert.equal(criteria['omitted-only'].status, 'unverified');
+  assert.deepEqual(criteria['omitted-only'].unrunChecks, ['omitted']);
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  assert.match(markdown, /Check selection: `first`, `second`/);
+  assert.match(markdown, /not run: omitted/);
+  const sarif = JSON.parse(await readFile(path.join(root, 'report.sarif'), 'utf8'));
+  assert.deepEqual(sarif.runs[0].properties.checkSelection, ['first', 'second']);
+  assert.equal(sarif.runs[0].properties.status, 'unverified');
+  assert.equal(sarif.runs[0].results.length, 1);
+  assert.equal(sarif.runs[0].results[0].ruleId, 'omitted');
+  assert.equal(sarif.runs[0].results[0].properties.notRun, true);
+  const junit = await readFile(path.join(root, 'report.xml'), 'utf8');
+  assert.match(junit, /name="checkSelection" value="first,second"/);
+  assert.match(junit, /tests="3" failures="0" errors="0" skipped="1"/);
+  assert.match(junit, /name="omitted"[^>]*><skipped message="check not run because it was omitted from selection"/);
+
+  const unknown = await invoke(root, ['--check', 'missing']);
+  assert.equal(unknown.code, 2);
+  assert.match(unknown.stderr, /Unknown check ID: missing/);
+  const duplicate = await invoke(root, ['--check', 'first', '--check', 'first']);
+  assert.equal(duplicate.code, 2);
+  assert.match(duplicate.stderr, /must be unique/);
+  assert.equal((await invoke(root, ['--validate', '--check', 'first'])).code, 2);
+  assert.equal((await invoke(root, ['--verify-bundle', '--check', 'first'])).code, 2);
+
+  const complete = await invoke(root);
+  assert.equal(complete.code, 0);
+  const completeReport = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  assert.equal(completeReport.status, 'passed');
+  assert.equal(completeReport.checkSelection, null);
+});
+
 test('command output substring assertions report pass, fail, and truncated uncertainty', async (t) => {
   const root = await repository(t);
   const config = {

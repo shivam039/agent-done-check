@@ -43,6 +43,11 @@
     "status": {
       "$ref": "#/$defs/status"
     },
+    "checkSelection": {
+      "type": ["array", "null"],
+      "uniqueItems": true,
+      "items": { "type": "string" }
+    },
     "repository": {
       "type": "string"
     },
@@ -122,6 +127,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "unrunChecks": {
+            "type": "array",
+            "items": { "type": "string" }
           }
         },
         "additionalProperties": true

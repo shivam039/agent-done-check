@@ -273,12 +273,19 @@ function parseArgs(argv) {
     else if (arg === '--version' || arg === '-v') options.version = true;
     else if (arg === '--validate') options.validate = true;
     else if (arg === '--verify-bundle') options.verifyBundle = true;
+    else if (arg === '--check') {
+      if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error('Expected a value after --check');
+      options.check ??= [];
+      options.check.push(argv[++i]);
+    }
     else if (['--config', '--commit', '--output', '--markdown-output', '--manifest', '--sarif-output', '--junit-output'].includes(arg)) {
       if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error(`Expected a value after ${arg}`);
       options[arg.slice(2)] = argv[++i];
     } else throw new Error(`Unknown argument: ${arg}`);
   }
   if (options.validate && options.verifyBundle) throw new Error('--validate and --verify-bundle cannot be used together.');
+  if (options.check && (options.validate || options.verifyBundle)) throw new Error('--check can only be used for a normal audit.');
+  if (options.check && new Set(options.check).size !== options.check.length) throw new Error('--check values must be unique.');
   return options;
 }
 
@@ -452,7 +459,11 @@ function unavailableHttpResult(check) {
 }
 
 function sarifReport(report) {
-  const findings = report.checks.filter((check) => check.status !== 'passed');
+  const unrunChecks = [...new Set(report.criteria.flatMap((criterion) => criterion.unrunChecks ?? []))];
+  const findings = [
+    ...report.checks.filter((check) => check.status !== 'passed').map((check) => ({ ...check, notRun: false })),
+    ...unrunChecks.map((id) => ({ id, status: 'unverified', notRun: true, criteria: [] })),
+  ];
   const rules = findings.map((check) => ({ id: check.id, shortDescription: { text: 'Configured acceptance check' } }));
   const ruleIndexes = new Map(rules.map((rule, index) => [rule.id, index]));
   return {
@@ -460,9 +471,9 @@ function sarifReport(report) {
     runs: [{
       tool: { driver: { name: 'Agent Done Check', version: VERSION, informationUri: 'https://github.com/shivam039/agent-done-check', rules } },
       results: findings.map((check) => ({ ruleId: check.id, ruleIndex: ruleIndexes.get(check.id), level: check.status === 'failed' ? 'error' : 'warning',
-        message: { text: `Check ${check.id} ${check.status}.` },
-        properties: { checkId: check.id, criteria: check.criteria, status: check.status, targetCommit: report.commit } })),
-      properties: { targetCommit: report.commit, runId: report.runId },
+        message: { text: check.notRun ? `Check ${check.id} was not run because it was omitted from the selected checks.` : `Check ${check.id} ${check.status}.` },
+        properties: { checkId: check.id, criteria: check.criteria, status: check.status, notRun: check.notRun, targetCommit: report.commit } })),
+      properties: { targetCommit: report.commit, runId: report.runId, checkSelection: report.checkSelection, status: report.status },
     }],
   };
 }
@@ -472,22 +483,25 @@ function xmlEscape(value) {
 }
 
 function junitReport(report) {
-  const failed = report.checks.filter((check) => check.status === 'failed').length;
-  const skipped = report.checks.filter((check) => check.status === 'unverified').length;
-  const totalMs = report.checks.reduce((sum, check) => sum + (check.durationMs ?? 0), 0);
+  const unrunChecks = [...new Set(report.criteria.flatMap((criterion) => criterion.unrunChecks ?? []))];
+  const checks = [...report.checks, ...unrunChecks.map((id) => ({ id, status: 'unverified', durationMs: 0, notRun: true }))];
+  const failed = checks.filter((check) => check.status === 'failed').length;
+  const skipped = checks.filter((check) => check.status === 'unverified').length;
+  const totalMs = checks.reduce((sum, check) => sum + (check.durationMs ?? 0), 0);
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<testsuites tests="${report.checks.length}" failures="${failed}" errors="0" skipped="${skipped}" time="${(totalMs / 1000).toFixed(3)}">`,
-    `  <testsuite name="Agent Done Check" tests="${report.checks.length}" failures="${failed}" errors="0" skipped="${skipped}" time="${(totalMs / 1000).toFixed(3)}" timestamp="${xmlEscape(report.startedAt)}">`,
+    `<testsuites tests="${checks.length}" failures="${failed}" errors="0" skipped="${skipped}" time="${(totalMs / 1000).toFixed(3)}">`,
+    `  <testsuite name="Agent Done Check" tests="${checks.length}" failures="${failed}" errors="0" skipped="${skipped}" time="${(totalMs / 1000).toFixed(3)}" timestamp="${xmlEscape(report.startedAt)}">`,
     '    <properties>',
     `      <property name="runId" value="${xmlEscape(report.runId)}"/>`,
     `      <property name="targetCommit" value="${xmlEscape(report.commit)}"/>`,
+    `      <property name="checkSelection" value="${xmlEscape(report.checkSelection ? report.checkSelection.join(',') : 'all')}"/>`,
     '    </properties>',
   ];
-  for (const check of report.checks) {
+  for (const check of checks) {
     const base = `    <testcase classname="agent-done-check" name="${xmlEscape(check.id)}" time="${((check.durationMs ?? 0) / 1000).toFixed(3)}"`;
     if (check.status === 'failed') lines.push(`${base}><failure message="check failed"/></testcase>`);
-    else if (check.status === 'unverified') lines.push(`${base}><skipped message="check unverified"/></testcase>`);
+    else if (check.status === 'unverified') lines.push(`${base}><skipped message="${check.notRun ? 'check not run because it was omitted from selection' : 'check unverified'}"/></testcase>`);
     else lines.push(`${base}/>`);
   }
   lines.push('  </testsuite>', '</testsuites>', '');
@@ -640,6 +654,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
     `- Repository: ${markdownCode(report.repository)}`,
     `- Commit: ${markdownCode(report.commit)}`,
     `- Run: ${markdownCode(report.runId)}`,
+    `- Check selection: ${report.checkSelection ? report.checkSelection.map(markdownCode).join(', ') : 'all configured checks'}`,
     `- Started: ${report.startedAt}`,
     `- Completed: ${report.completedAt}`,
     `- Config SHA-256: ${markdownCode(report.reproducibility.configSha256)}`,
@@ -647,7 +662,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
     '## Acceptance criteria', '',
     '| Status | ID | Criterion | Checks |', '| --- | --- | --- | --- |',
   ];
-  for (const criterion of report.criteria) lines.push(`| ${criterion.status.toUpperCase()} | ${criterion.id} | ${table([criterion.description])} | ${criterion.checks.join(', ') || 'none'} |`);
+  for (const criterion of report.criteria) lines.push(`| ${criterion.status.toUpperCase()} | ${criterion.id} | ${table([criterion.description])} | ${criterion.checks.join(', ') || 'none'}${criterion.unrunChecks?.length ? ` (not run: ${criterion.unrunChecks.join(', ')})` : ''} |`);
   lines.push('', '## Checks', '', '| Status | ID | Exit | Duration | Evidence |', '| --- | --- | --- | ---: | --- |');
   for (const check of report.checks) {
     const evidence = [relativeEvidence(check.id, 'stdout'), relativeEvidence(check.id, 'stderr'), relativeEvidence(check.id, 'browser-screenshot')].filter(Boolean).join(' · ') || 'none';
@@ -681,7 +696,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
 }
 
 function usage() {
-  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>] [--sarif-output <file>] [--junit-output <file>]\n  agent-done-check --validate [--config <file>]\n  agent-done-check --verify-bundle [--manifest <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --sarif-output    Optional SARIF 2.1.0 output path\n  --junit-output    Optional JUnit XML output path\n  --validate        Validate config and print JSON without running checks\n  --verify-bundle   Verify manifest and artifact integrity without rerunning checks\n  --manifest        Manifest path (default: .agent-done-check/manifest.json)\n  --help            Show this help\n  --version         Show version\n`;
+  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--check <id> ...] [--commit <sha>] [--output <file>] [--markdown-output <file>] [--sarif-output <file>] [--junit-output <file>]\n  agent-done-check --validate [--config <file>]\n  agent-done-check --verify-bundle [--manifest <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --check           Run only this configured check (repeatable)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --sarif-output    Optional SARIF 2.1.0 output path\n  --junit-output    Optional JUnit XML output path\n  --validate        Validate config and print JSON without running checks\n  --verify-bundle   Verify manifest and artifact integrity without rerunning checks\n  --manifest        Manifest path (default: .agent-done-check/manifest.json)\n  --help            Show this help\n  --version         Show version\n`;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -737,6 +752,17 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   validate(config);
+  const selectedCheckIds = args.check
+    ? config.checks.filter((check) => args.check.includes(check.id)).map((check) => check.id)
+    : null;
+  if (args.check) {
+    const knownCheckIds = new Set(config.checks.map((check) => check.id));
+    const unknown = args.check.filter((id) => !knownCheckIds.has(id));
+    if (unknown.length) throw new Error(`Unknown check ID${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}.`);
+  }
+  const checksToRun = selectedCheckIds
+    ? config.checks.filter((check) => selectedCheckIds.includes(check.id))
+    : config.checks;
   const output = path.resolve(root, args.output ?? '.agent-done-check/report.json');
   const markdownOutput = path.resolve(root, args['markdown-output'] ?? path.join(path.dirname(output), 'report.md'));
   const manifestPath = path.join(path.dirname(output), 'manifest.json');
@@ -760,7 +786,7 @@ export async function main(argv = process.argv.slice(2)) {
 
   try {
     await mkdir(evidenceDirectory, { recursive: true });
-    for (const check of config.checks) {
+    for (const check of checksToRun) {
       const checkStarted = new Date().toISOString();
       const worktree = path.join(checkout, check.id);
       const checkRedactions = [...new Set([
@@ -900,10 +926,12 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     const criteria = config.criteria.map((criterion) => {
+      const configuredChecks = config.checks.filter((check) => check.criteria.includes(criterion.id));
       const checks = results.filter((result) => result.criteria.includes(criterion.id));
+      const unrunChecks = configuredChecks.filter((check) => !checksToRun.some((ran) => ran.id === check.id)).map((check) => check.id);
       const status = checks.some((result) => result.status === 'failed') ? 'failed'
-        : checks.length === 0 || checks.some((result) => result.status === 'unverified') ? 'unverified' : 'passed';
-      return { ...criterion, status, checks: checks.map((check) => check.id) };
+        : unrunChecks.length || checks.length === 0 || checks.some((result) => result.status === 'unverified') ? 'unverified' : 'passed';
+      return { ...criterion, status, checks: configuredChecks.map((check) => check.id), ...(unrunChecks.length ? { unrunChecks } : {}) };
     });
     const status = criteria.some((item) => item.status === 'failed') ? 'failed'
       : criteria.some((item) => item.status === 'unverified') ? 'unverified' : 'passed';
@@ -912,6 +940,7 @@ export async function main(argv = process.argv.slice(2)) {
       tool: { name: 'agent-done-check', version: VERSION },
       runId,
       status,
+      checkSelection: selectedCheckIds,
       repository: repositoryName,
       commit,
       startedAt,

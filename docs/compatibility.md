@@ -1,6 +1,6 @@
 # Compatibility and migration policy
 
-Agent Done Check is pre-1.0. Its current contracts are configuration `version: 1`, JSON report `schemaVersion: 3`, and manifest `schemaVersion: 1`. The previous report `schemaVersion: 2` remains documented by its versioned schema. The schemas for these contracts live in [`schemas/`](../schemas/).
+Agent Done Check is pre-1.0. Its current contracts are configuration `version: 1`, JSON report `schemaVersion: 4`, and manifest `schemaVersion: 1`. Report schema v3 and v2 remain documented by their versioned schemas. The schemas for these contracts live in [`schemas/`](../schemas/).
 
 ## Version markers
 
@@ -21,7 +21,7 @@ A change is breaking if it removes a documented property, changes a property's t
 
 Before 1.0, breaking changes may be made with explicit migration notes and the appropriate marker/schema increment. The maintainers will document affected fields, old and new behavior, upgrade steps, and the first release that removes deprecated behavior. No compatibility guarantee beyond this published policy is implied by the 0.x package version.
 
-Report schema v3 adds the `file` check type and its result metadata. Consumers that validate reports against v2 should continue using the v2 schema for v2 reports; v3 reports use the v3 schema. Config remains version 1 because the file check is an additive check type with an explicit discriminator.
+Report schema v3 adds the `file` check type and its result metadata. Report schema v4 adds HTTP check results and additive command result metadata, including focused-run selection fields. Consumers that validate reports against v2 or v3 should use the matching versioned schema; v4 reports use the v4 schema. Config remains version 1 because these check options and types are additive.
 
 After 1.0, package releases will follow semantic versioning: breaking public API or contract changes require a major package version; compatible additions use a minor version; fixes that do not change documented behavior use a patch version. Contract markers and schemas remain independently versioned and increment when their contract changes.
 

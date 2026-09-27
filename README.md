@@ -20,6 +20,8 @@ node ./bin/agent-done-check.js --config agent-done-check.json
 
 To verify a specific revision, add `--commit <full-or-resolvable-revision>`. The default is `HEAD`. By default, the JSON report, Markdown report, and manifest are written under `.agent-done-check/`. Captured command output and browser screenshots are stored under `.agent-done-check/evidence/<run-id>/`. The `--output` and `--markdown-output` options can change the report paths.
 
+Pass `--check <id>` one or more times to rerun selected checks, for example `--check unit-tests --check lint`. The checks run in configuration order. Reports identify the selection; any acceptance criterion that depends on an omitted check remains `unverified`, so a focused run cannot imply that the full configured suite passed. JSON and Markdown identify omitted check IDs, SARIF emits warnings for them, and JUnit lists them as skipped. Omit `--check` to run every configured check. Selection is an audit-only option and cannot be combined with `--validate` or `--verify-bundle`.
+
 Copy [`agent-done-check.example.json`](./agent-done-check.example.json) to `agent-done-check.json` and replace its example criteria and commands with checks for your project. A command check looks like this:
 
 ```json
