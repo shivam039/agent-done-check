@@ -107,3 +107,7 @@ Use `type: "http"` for a read-only `GET` probe. The response must include the ex
 ### Validate a config without running it
 
 Run `node ./bin/agent-done-check.js --validate` to check `agent-done-check.json`, or pass `--config <file>` for another path. Validation works outside a Git repository and never executes configured checks. It prints one JSON object: valid results include `valid`, `configPath`, `criterionCount`, and `checkCount`; invalid results include `valid: false` and an `errors` array. The command exits 0 for valid input and 2 for invalid, unreadable, or malformed input.
+
+### Verify an existing report bundle
+
+Run `node ./bin/agent-done-check.js --verify-bundle` to check `.agent-done-check/manifest.json`, or use `--manifest <file>` to select another manifest. The command verifies the report identity, each listed file's byte count and SHA-256, and keeps resolved artifact paths inside the manifest directory. It works outside a Git repository and never reruns checks. Exit status is 0 for a valid bundle, 1 for missing or inconsistent artifacts, and 2 for an unreadable or malformed manifest. A matching unsigned manifest proves internal consistency, not authorship or authenticity.

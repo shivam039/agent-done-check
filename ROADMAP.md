@@ -38,11 +38,17 @@ PRD: [`docs/PRD-0.7.0-commit-bound-http-checks.md`](./docs/PRD-0.7.0-commit-boun
 - Bound response bodies and record only sanitized status and hash metadata.
 - Preserve report schemas v2 and v3 and introduce report schema v4.
 
-## Current release work: 0.8.0 — Offline config validation
+## Completed: 0.8.0 — Offline config validation
 
 PRD: [`docs/PRD-0.8.0-offline-config-validation.md`](./docs/PRD-0.8.0-offline-config-validation.md)
 
 - Add a JSON-output validation mode that checks configs without running checks or requiring Git.
+
+## Current release work: 0.9.0 — Report bundle verification
+
+PRD: [`docs/PRD-0.9.0-report-bundle-verification.md`](./docs/PRD-0.9.0-report-bundle-verification.md)
+
+- Verify manifest paths, byte counts, hashes, and report identity without rerunning checks.
 
 ## Later
 

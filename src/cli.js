@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, mkdir, writeFile, rm, rename, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, mkdir, writeFile, rm, rename, stat, realpath } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -178,6 +179,88 @@ async function writeAtomic(filename, content, runId) {
   }
 }
 
+async function hashFile(filename) {
+  const hash = createHash('sha256');
+  let bytes = 0;
+  for await (const chunk of createReadStream(filename)) {
+    bytes += chunk.byteLength;
+    hash.update(chunk);
+  }
+  return { bytes, sha256: hash.digest('hex') };
+}
+
+async function verifyBundle(manifestPath, root) {
+  const displayPath = path.relative(root, manifestPath);
+  let manifest;
+  try {
+    const info = await stat(manifestPath);
+    if (info.size > MAX_CONFIG_BYTES) throw new Error(`Manifest exceeds the ${MAX_CONFIG_BYTES}-byte limit.`);
+    manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  } catch (error) {
+    return { code: 2, output: { valid: false, manifestPath: displayPath, runId: null, commit: null, artifactsChecked: 0, errors: [`Cannot read a valid manifest: ${error.message}`] } };
+  }
+  const invalid = [];
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) invalid.push('Manifest must be a JSON object.');
+  else {
+    if (manifest.schemaVersion !== 1) invalid.push('Manifest schemaVersion must be 1.');
+    if (typeof manifest.runId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(manifest.runId)) invalid.push('Manifest runId must be a UUID.');
+    if (typeof manifest.commit !== 'string' || !/^[a-f0-9]{40,64}$/.test(manifest.commit)) invalid.push('Manifest commit must be a full hexadecimal Git SHA.');
+    if (!manifest.config || typeof manifest.config !== 'object' || typeof manifest.config.path !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.config.sha256)) invalid.push('Manifest config must contain a path and SHA-256.');
+    if (!Array.isArray(manifest.artifacts)) invalid.push('Manifest artifacts must be an array.');
+  }
+  if (invalid.length) return { code: 2, output: { valid: false, manifestPath: displayPath, runId: manifest?.runId ?? null, commit: manifest?.commit ?? null, artifactsChecked: 0, errors: invalid } };
+  const reportArtifacts = manifest.artifacts.filter((artifact) => artifact?.role === 'json-report');
+  if (reportArtifacts.length !== 1) invalid.push('Manifest must list exactly one json-report artifact.');
+  const seen = new Set();
+  for (const [index, artifact] of manifest.artifacts.entries()) {
+    if (!artifact || typeof artifact !== 'object' || typeof artifact.role !== 'string' || typeof artifact.mediaType !== 'string'
+      || typeof artifact.path !== 'string' || !artifact.path || !/^[a-f0-9]{64}$/.test(artifact.sha256)
+      || !Number.isSafeInteger(artifact.bytes) || artifact.bytes < 0) {
+      invalid.push(`Artifact ${index} has invalid required fields.`); continue;
+    }
+    if (path.isAbsolute(artifact.path) || path.win32.isAbsolute(artifact.path)) invalid.push(`Artifact ${index} path must be relative.`);
+    const resolved = path.resolve(path.dirname(manifestPath), artifact.path);
+    const relative = path.relative(path.dirname(manifestPath), resolved);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) invalid.push(`Artifact ${index} path escapes the manifest directory.`);
+    if (seen.has(artifact.path)) invalid.push(`Artifact path is duplicated: ${artifact.path}`);
+    seen.add(artifact.path);
+  }
+  if (invalid.length) return { code: 2, output: { valid: false, manifestPath: displayPath, runId: manifest.runId, commit: manifest.commit, artifactsChecked: 0, errors: invalid } };
+
+  const errors = [];
+  let artifactsChecked = 0;
+  let realRoot;
+  try { realRoot = await realpath(path.dirname(manifestPath)); }
+  catch (error) { return { code: 2, output: { valid: false, manifestPath: displayPath, runId: manifest.runId, commit: manifest.commit, artifactsChecked, errors: [`Cannot resolve manifest directory: ${error.message}`] } }; }
+  let report;
+  for (const artifact of manifest.artifacts) {
+    const file = path.resolve(path.dirname(manifestPath), artifact.path);
+    try {
+      const actual = await realpath(file);
+      const relative = path.relative(realRoot, actual);
+      if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+        errors.push(`Artifact path resolves outside the manifest directory: ${artifact.path}`); continue;
+      }
+      const info = await stat(actual);
+      if (!info.isFile()) { errors.push(`Artifact is not a regular file: ${artifact.path}`); continue; }
+      const digest = await hashFile(actual);
+      artifactsChecked += 1;
+      if (digest.bytes !== artifact.bytes) errors.push(`Artifact byte count does not match: ${artifact.path}`);
+      if (digest.sha256 !== artifact.sha256) errors.push(`Artifact SHA-256 does not match: ${artifact.path}`);
+      if (artifact.role === 'json-report') {
+        if (digest.bytes > 16 * 1024 * 1024) errors.push('JSON report artifact exceeds the 16 MiB parsing limit.');
+        else {
+          try { report = JSON.parse(await readFile(actual, 'utf8')); }
+          catch { errors.push('JSON report artifact is not valid JSON.'); }
+        }
+      }
+    } catch (error) { errors.push(`Cannot verify artifact ${artifact.path}: ${error.message}`); }
+  }
+  if (!report || report.runId !== manifest.runId) errors.push('JSON report runId does not match the manifest.');
+  if (!report || report.commit !== manifest.commit) errors.push('JSON report commit does not match the manifest.');
+  return { code: errors.length ? 1 : 0, output: { valid: errors.length === 0, manifestPath: displayPath, runId: manifest.runId, commit: manifest.commit, artifactsChecked, errors } };
+}
+
 function parseArgs(argv) {
   const options = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -185,11 +268,13 @@ function parseArgs(argv) {
     if (arg === '--help' || arg === '-h') options.help = true;
     else if (arg === '--version' || arg === '-v') options.version = true;
     else if (arg === '--validate') options.validate = true;
-    else if (['--config', '--commit', '--output', '--markdown-output'].includes(arg)) {
+    else if (arg === '--verify-bundle') options.verifyBundle = true;
+    else if (['--config', '--commit', '--output', '--markdown-output', '--manifest'].includes(arg)) {
       if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error(`Expected a value after ${arg}`);
       options[arg.slice(2)] = argv[++i];
     } else throw new Error(`Unknown argument: ${arg}`);
   }
+  if (options.validate && options.verifyBundle) throw new Error('--validate and --verify-bundle cannot be used together.');
   return options;
 }
 
@@ -520,7 +605,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
 }
 
 function usage() {
-  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>]\n  agent-done-check --validate [--config <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --validate        Validate config and print JSON without running checks\n  --help            Show this help\n  --version         Show version\n`;
+  return `agent-done-check ${VERSION}\n\nUsage:\n  agent-done-check [--config <file>] [--commit <sha>] [--output <file>] [--markdown-output <file>]\n  agent-done-check --validate [--config <file>]\n  agent-done-check --verify-bundle [--manifest <file>]\n\nOptions:\n  --config          JSON verification contract (default: agent-done-check.json)\n  --commit          Git revision to verify (default: HEAD)\n  --output          JSON report path (default: .agent-done-check/report.json)\n  --markdown-output Markdown report path (default: sibling report.md)\n  --validate        Validate config and print JSON without running checks\n  --verify-bundle   Verify manifest and artifact integrity without rerunning checks\n  --manifest        Manifest path (default: .agent-done-check/manifest.json)\n  --help            Show this help\n  --version         Show version\n`;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -530,6 +615,12 @@ export async function main(argv = process.argv.slice(2)) {
 
   const root = process.cwd();
   const configPath = path.resolve(root, args.config ?? 'agent-done-check.json');
+  if (args.verifyBundle) {
+    const result = await verifyBundle(path.resolve(root, args.manifest ?? '.agent-done-check/manifest.json'), root);
+    console.log(JSON.stringify(result.output));
+    if (result.code !== 0) process.exitCode = result.code;
+    return;
+  }
   let configContents;
   try {
     const info = await stat(configPath);

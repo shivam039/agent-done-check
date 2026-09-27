@@ -86,6 +86,15 @@ async function invokeAsync(root, args = []) {
   });
 }
 
+function invokeBundle(cwd, manifestPath) {
+  try {
+    const stdout = execFileSync(process.execPath, [cliPath, '--verify-bundle', '--manifest', manifestPath], { cwd, encoding: 'utf8' });
+    return { code: 0, output: JSON.parse(stdout) };
+  } catch (error) {
+    return { code: error.status, output: JSON.parse(error.stdout.toString()) };
+  }
+}
+
 test('command report, evidence files, and manifest hashes agree', async (t) => {
   const root = await repository(t);
   const config = baseConfig({ command: nodeCommand('console.log("evidence-ok")') });
@@ -106,6 +115,10 @@ test('command report, evidence files, and manifest hashes agree', async (t) => {
   assert.ok(stdoutArtifact);
   const stdoutBytes = await readFile(path.join(root, '.agent-done-check', stdoutArtifact.path));
   assert.equal(stdoutArtifact.sha256, createHash('sha256').update(stdoutBytes).digest('hex'));
+  const verified = invokeBundle(root, path.join(root, '.agent-done-check/manifest.json'));
+  assert.equal(verified.code, 0, JSON.stringify(verified.output));
+  assert.equal(verified.output.valid, true);
+  assert.equal(verified.output.artifactsChecked, manifest.artifacts.length);
   const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
   assert.ok(!markdown.includes('<img'));
   assert.match(markdown, /&lt;img/);
@@ -553,4 +566,51 @@ test('validation mode emits JSON offline and never runs configured checks', asyn
   const malformed = invokeValidation('malformed.json');
   assert.equal(malformed.code, 2);
   assert.match(malformed.output.errors[0], /^Invalid JSON:/);
+});
+
+test('bundle verification works offline and rejects malformed or escaping manifests', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'agent-done-check-bundle-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const runId = '123e4567-e89b-42d3-a456-426614174000';
+  const commit = 'a'.repeat(40);
+  const reportPath = path.join(root, 'report.json');
+  const reportText = JSON.stringify({ runId, commit });
+  await writeFile(reportPath, reportText);
+  const artifact = { role: 'json-report', path: 'report.json', sha256: createHash('sha256').update(reportText).digest('hex'), bytes: Buffer.byteLength(reportText), mediaType: 'application/json' };
+  const manifestPath = path.join(root, 'manifest.json');
+  const manifest = { schemaVersion: 1, runId, commit, config: { path: 'config.json', sha256: 'b'.repeat(64) }, artifacts: [artifact] };
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const valid = invokeBundle(root, manifestPath);
+  assert.equal(valid.code, 0, JSON.stringify(valid.output));
+  assert.equal(valid.output.artifactsChecked, 1);
+
+  await writeFile(reportPath, `${reportText} `);
+  const changed = invokeBundle(root, manifestPath);
+  assert.equal(changed.code, 1);
+  assert.equal(changed.output.valid, false);
+  assert.ok(changed.output.errors.some((error) => error.includes('SHA-256')));
+
+  manifest.artifacts[0].path = '../outside.json';
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const traversal = invokeBundle(root, manifestPath);
+  assert.equal(traversal.code, 2);
+  assert.ok(traversal.output.errors.some((error) => error.includes('escapes')));
+
+  if (process.platform !== 'win32') {
+    const outsideDirectory = await mkdtemp(path.join(tmpdir(), 'agent-done-check-outside-'));
+    t.after(() => rm(outsideDirectory, { recursive: true, force: true }));
+    const outsideFile = path.join(outsideDirectory, 'report.json');
+    await writeFile(outsideFile, reportText);
+    await symlink(outsideFile, path.join(root, 'linked-report.json'));
+    manifest.artifacts[0] = { ...artifact, path: 'linked-report.json' };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const escapedLink = invokeBundle(root, manifestPath);
+    assert.equal(escapedLink.code, 1);
+    assert.ok(escapedLink.output.errors.some((error) => error.includes('outside')));
+  }
+
+  await writeFile(manifestPath, '{broken');
+  const malformed = invokeBundle(root, manifestPath);
+  assert.equal(malformed.code, 2);
+  assert.equal(malformed.output.valid, false);
 });
