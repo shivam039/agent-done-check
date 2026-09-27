@@ -174,6 +174,7 @@ test('HTTP report schema describes nullable match results while staying backward
   report.checks[0].http.responseHeadersMatched = null;
   report.checks[0].http.responseHeadersPresent = null;
   report.checks[0].http.contentTypeMatched = null;
+  report.checks[0].http.contentType = null;
   report.checks[0].http.bodySha256Matched = null;
   assertValid(validateReport, report, 'HTTP report without assertions');
   report.checks[0].http.expectedStatuses = [200, 204];
@@ -181,6 +182,7 @@ test('HTTP report schema describes nullable match results while staying backward
   report.checks[0].http.responseHeadersMatched = { 'x-mode': true };
   report.checks[0].http.responseHeadersPresent = { 'content-type': true };
   report.checks[0].http.contentTypeMatched = true;
+  report.checks[0].http.contentType = 'application/json';
   report.checks[0].http.bodySha256Matched = true;
   report.checks[0].http.bodyJsonPointerMatched = true;
   assertValid(validateReport, report, 'HTTP report with matching assertions');

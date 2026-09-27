@@ -480,7 +480,7 @@ async function runHttpCheck(commit, check, timeoutMs) {
   const expectedStatuses = check.expectedStatuses ?? [check.expectedStatus ?? 200];
   const evidence = { url: displayUrl(check.url), expectedStatus: expectedStatuses[0], expectedStatuses, statusCode: null, maxBodyBytes,
     commitHeader, revisionBinding: 'missing', bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null,
-    responseHeadersPresent: null, contentTypeMatched: null, responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
+    responseHeadersPresent: null, contentType: null, contentTypeMatched: null, responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
   try {
     const response = await fetch(url, { method: 'GET', redirect: 'error', signal: controller.signal });
     evidence.statusCode = response.status;
@@ -491,6 +491,11 @@ async function runHttpCheck(commit, check, timeoutMs) {
       return { status: 'unverified', error: 'The HTTP response did not prove it serves the requested commit.', http: evidence };
     }
     evidence.revisionBinding = 'verified';
+    const observedContentType = response.headers.get('content-type');
+    if (observedContentType !== null) {
+      const mediaType = observedContentType.split(';', 1)[0].trim();
+      if (mediaType.length <= 256 && /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(mediaType)) evidence.contentType = mediaType.toLowerCase();
+    }
     if (check.requiredResponseHeaders) {
       evidence.responseHeadersPresent = Object.fromEntries(check.requiredResponseHeaders.map((name) => {
         const normalizedName = name.toLowerCase();
@@ -502,9 +507,7 @@ async function runHttpCheck(commit, check, timeoutMs) {
       }
     }
     if (typeof check.expectedContentType === 'string') {
-      const observed = response.headers.get('content-type');
-      const normalized = observed?.split(';', 1)[0].trim().toLowerCase() ?? null;
-      evidence.contentTypeMatched = normalized === check.expectedContentType.split(';', 1)[0].trim().toLowerCase();
+      evidence.contentTypeMatched = evidence.contentType === check.expectedContentType.toLowerCase();
       if (!evidence.contentTypeMatched) {
         await response.body?.cancel().catch(() => {});
         return { status: 'failed', error: 'The bound HTTP response did not match the configured content type.', http: evidence };
@@ -565,7 +568,7 @@ function unavailableHttpResult(check) {
   const expectedStatuses = check.expectedStatuses ?? [check.expectedStatus ?? 200];
   return { url: displayUrl(check.url), expectedStatus: expectedStatuses[0], expectedStatuses, statusCode: null, maxBodyBytes: check.maxBodyBytes ?? MAX_HTTP_BODY_BYTES,
     commitHeader: (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase(), revisionBinding: 'missing',
-    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersPresent: null, contentTypeMatched: null, responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
+    bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersPresent: null, contentType: null, contentTypeMatched: null, responseHeadersMatched: null, bodySha256Matched: null, bodyJsonPointerMatched: null };
 }
 
 function sarifReport(report) {
@@ -885,7 +888,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
         ...Object.entries(check.http.responseHeadersMatched ?? {}).map(([name, matched]) => `${name} ${matched ? 'matched' : 'did not match'}`),
         ...(check.http.contentTypeMatched === true ? ['content type matched'] : check.http.contentTypeMatched === false ? ['content type did not match'] : []),
       ].join(', ');
-      lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; expected ${check.http.expectedStatuses.join(' or ')}; commit binding ${check.http.revisionBinding}${headerAssertions ? `; response headers ${headerAssertions}` : ''}${check.http.bodySha256Matched === true ? '; body SHA-256 matched' : check.http.bodySha256Matched === false ? '; body SHA-256 did not match' : ''}${check.http.bodyJsonPointerMatched === true ? '; JSON Pointer matched' : check.http.bodyJsonPointerMatched === false ? '; JSON Pointer did not match' : ''}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
+      lines.push('', `HTTP GET: ${markdownCode(check.http.url)} — status ${check.http.statusCode ?? 'unavailable'}; expected ${check.http.expectedStatuses.join(' or ')}; commit binding ${check.http.revisionBinding}${check.http.contentType ? `; content type ${markdownCode(check.http.contentType)}` : ''}${headerAssertions ? `; response headers ${headerAssertions}` : ''}${check.http.bodySha256Matched === true ? '; body SHA-256 matched' : check.http.bodySha256Matched === false ? '; body SHA-256 did not match' : ''}${check.http.bodyJsonPointerMatched === true ? '; JSON Pointer matched' : check.http.bodyJsonPointerMatched === false ? '; JSON Pointer did not match' : ''}${check.http.bodySha256 ? `; body SHA-256 ${markdownCode(check.http.bodySha256)}` : ''}${check.http.bodyBytes != null ? `; ${check.http.bodyBytes} bytes` : ''}.`);
     }
     if (check.browser?.diagnostics) {
       const diagnostics = check.browser.diagnostics;
