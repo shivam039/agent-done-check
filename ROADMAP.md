@@ -122,10 +122,16 @@ PRD: [`docs/PRD-0.21.0-http-body-digest.md`](./docs/PRD-0.21.0-http-body-digest.
 
 - Verify bounded raw HTTP response bytes by SHA-256 after commit binding.
 
-## Current release work: 0.22.0 — HTTP report schema alignment
+## Completed: 0.22.0 — HTTP report schema alignment
 
 PRD: [`docs/PRD-0.22.0-http-report-schema.md`](./docs/PRD-0.22.0-http-report-schema.md)
 
 - Describe HTTP header and body digest match evidence in report schema v4.
+
+## Current release work: 0.23.0 — Per-check HTTP body limits
+
+PRD: [`docs/PRD-0.23.0-http-body-limit.md`](./docs/PRD-0.23.0-http-body-limit.md)
+
+- Let an HTTP check lower its response body byte cap up to the existing hard limit.
 
 ## Later

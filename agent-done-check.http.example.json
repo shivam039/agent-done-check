@@ -17,7 +17,8 @@
       "criteria": [
         "deployment"
       ],
-      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "maxBodyBytes": 65536
     }
   ]
 }

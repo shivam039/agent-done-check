@@ -373,6 +373,11 @@
         "bodySha256": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
+        },
+        "maxBodyBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
         }
       },
       "allOf": [

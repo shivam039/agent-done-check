@@ -854,6 +854,7 @@ test('HTTP checks require exact commit binding and keep response content out of 
     if (request.url === '/large') { response.end(Buffer.alloc(1_048_577, 97)); return; }
     if (request.url === '/binary') { response.end(Buffer.from([255, 254])); return; }
     if (request.url === '/binary-bound') { response.setHeader('x-agent-done-check-commit', targetCommit); response.end(Buffer.from([255, 254, 0])); return; }
+    if (request.url === '/limit') { response.setHeader('x-agent-done-check-commit', targetCommit); response.end('1234'); return; }
     response.end('healthy response');
   });
   let targetCommit;
@@ -864,11 +865,12 @@ test('HTTP checks require exact commit binding and keep response content out of 
     version: 1,
     timeoutMs: 5000,
     criteria: [{ id: 'http', description: 'HTTP evidence is bound to the verified revision.' }],
-    checks: ['/ok', '/missing', '/mismatch', '/redirect', '/failure', '/large', '/binary', '/binary-bound', '/timeout'].map((route) => ({
+    checks: ['/ok', '/missing', '/mismatch', '/redirect', '/failure', '/large', '/binary', '/binary-bound', '/timeout', '/limit', '/limit-over'].map((route) => ({
       id: route.slice(1), type: 'http', url: `http://127.0.0.1:${port}${route}`,
       ...(route === '/failure' ? { expectedStatus: 200 } : route === '/ok' ? { bodyContains: 'healthy' } : {}),
       ...(route === '/binary' ? { bodyContains: 'text-only assertion' } : {}),
       ...(route === '/binary-bound' ? { bodySha256: createHash('sha256').update(Buffer.from([255, 254, 0])).digest('hex') } : {}),
+      ...(route === '/limit' ? { maxBodyBytes: 4 } : route === '/limit-over' ? { maxBodyBytes: 3 } : {}),
       ...(route === '/timeout' ? { timeoutMs: 1000 } : {}), criteria: ['http'],
     })),
   };
@@ -894,6 +896,12 @@ test('HTTP checks require exact commit binding and keep response content out of 
   assert.equal(checks['binary-bound'].status, 'passed');
   assert.equal(checks['binary-bound'].http.bodySha256Matched, true);
   assert.equal(checks['binary-bound'].http.bodySha256, createHash('sha256').update(Buffer.from([255, 254, 0])).digest('hex'));
+  assert.equal(checks.limit.status, 'passed');
+  assert.equal(checks.limit.http.bodyBytes, 4);
+  assert.equal(checks.limit.http.maxBodyBytes, 4);
+  assert.equal(checks['limit-over'].status, 'unverified');
+  assert.equal(checks['limit-over'].http.maxBodyBytes, 3);
+  assert.match(checks['limit-over'].error, /3-byte limit/);
   assert.equal(checks.timeout.status, 'unverified');
   assert.match(checks.timeout.error, /timed out/);
   assert.ok(!JSON.stringify(report).includes('healthy response'));

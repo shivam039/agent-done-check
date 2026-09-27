@@ -476,7 +476,8 @@ async function runHttpCheck(commit, check, timeoutMs) {
   const commitHeader = (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const evidence = { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null,
+  const maxBodyBytes = check.maxBodyBytes ?? MAX_HTTP_BODY_BYTES;
+  const evidence = { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null, maxBodyBytes,
     commitHeader, revisionBinding: 'missing', bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null,
     responseHeadersMatched: null, bodySha256Matched: null };
   try {
@@ -504,13 +505,13 @@ async function runHttpCheck(commit, check, timeoutMs) {
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      chunks.push(Buffer.from(value));
-      if (bytes > MAX_HTTP_BODY_BYTES) {
+      if (bytes > maxBodyBytes) {
         evidence.bodyBytes = bytes;
         evidence.bodyTruncated = true;
-        await reader.cancel();
-        return { status: 'unverified', error: `The HTTP response exceeds the ${MAX_HTTP_BODY_BYTES}-byte limit.`, http: evidence };
+        await reader.cancel().catch(() => {});
+        return { status: 'unverified', error: `The HTTP response exceeds the ${maxBodyBytes}-byte limit.`, http: evidence };
       }
+      chunks.push(Buffer.from(value));
     }
     const body = Buffer.concat(chunks);
     evidence.bodyBytes = body.byteLength;
@@ -530,7 +531,7 @@ async function runHttpCheck(commit, check, timeoutMs) {
 }
 
 function unavailableHttpResult(check) {
-  return { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null,
+  return { url: displayUrl(check.url), expectedStatus: check.expectedStatus ?? 200, statusCode: null, maxBodyBytes: check.maxBodyBytes ?? MAX_HTTP_BODY_BYTES,
     commitHeader: (check.commitHeader ?? 'x-agent-done-check-commit').toLowerCase(), revisionBinding: 'missing',
     bodyBytes: null, bodySha256: null, bodyTruncated: false, bodyContainsMatched: null, responseHeadersMatched: null, bodySha256Matched: null };
 }
@@ -671,6 +672,7 @@ function validate(config) {
     }
     if (typeof check.responseHeaders !== 'undefined' && checkType !== 'http') errors.push(`${at}.responseHeaders: is supported only for HTTP checks.`);
     if (typeof check.bodySha256 !== 'undefined' && checkType !== 'http') errors.push(`${at}.bodySha256: is supported only for HTTP checks.`);
+    if (typeof check.maxBodyBytes !== 'undefined' && checkType !== 'http') errors.push(`${at}.maxBodyBytes: is supported only for HTTP checks.`);
     if (typeof check.pointer !== 'undefined' && (checkType !== 'file' || check.assertion !== 'jsonPointerEquals')) errors.push(`${at}.pointer: is supported only with the jsonPointerEquals file assertion.`);
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
@@ -690,6 +692,7 @@ function validate(config) {
       if (typeof check.expectedStatus !== 'undefined' && (!Number.isInteger(check.expectedStatus) || check.expectedStatus < 100 || check.expectedStatus > 599)) errors.push(`${at}.expectedStatus: must be an HTTP status integer from 100 to 599.`);
       if (typeof check.commitHeader !== 'undefined' && (typeof check.commitHeader !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(check.commitHeader))) errors.push(`${at}.commitHeader: must be a valid HTTP header name.`);
       if (typeof check.bodyContains !== 'undefined' && typeof check.bodyContains !== 'string') errors.push(`${at}.bodyContains: must be a string.`);
+      if (typeof check.maxBodyBytes !== 'undefined' && (!Number.isInteger(check.maxBodyBytes) || check.maxBodyBytes < 1 || check.maxBodyBytes > MAX_HTTP_BODY_BYTES)) errors.push(`${at}.maxBodyBytes: must be an integer from 1 to ${MAX_HTTP_BODY_BYTES} bytes.`);
       if (typeof check.bodySha256 !== 'undefined' && (typeof check.bodySha256 !== 'string' || !/^[a-f0-9]{64}$/.test(check.bodySha256))) errors.push(`${at}.bodySha256: must be a 64-character lowercase SHA-256 digest.`);
       if (typeof check.responseHeaders !== 'undefined') {
         if (!check.responseHeaders || typeof check.responseHeaders !== 'object' || Array.isArray(check.responseHeaders)) errors.push(`${at}.responseHeaders: must be an object of header names to expected string values.`);
