@@ -134,10 +134,16 @@ PRD: [`docs/PRD-0.23.0-http-body-limit.md`](./docs/PRD-0.23.0-http-body-limit.md
 
 - Let an HTTP check lower its response body byte cap up to the existing hard limit.
 
-## Current release work: 0.24.0 — JSON Pointer existence assertions
+## Completed: 0.24.0 — JSON Pointer existence assertions
 
 PRD: [`docs/PRD-0.24.0-json-pointer-exists.md`](./docs/PRD-0.24.0-json-pointer-exists.md)
 
 - Check that a JSON Pointer resolves in a committed JSON file without matching its value.
+
+## Current release work: 0.25.0 — HTTP JSON Pointer assertions
+
+PRD: [`docs/PRD-0.25.0-http-json-pointer.md`](./docs/PRD-0.25.0-http-json-pointer.md)
+
+- Compare a typed JSON value at an RFC 6901 pointer in a bound HTTP response.
 
 ## Later

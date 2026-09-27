@@ -379,6 +379,22 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 1048576
+        },
+        "bodyJsonPointerEquals": {
+          "type": "object",
+          "required": [
+            "pointer",
+            "expected"
+          ],
+          "properties": {
+            "pointer": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+            },
+            "expected": {}
+          },
+          "additionalProperties": false
         }
       },
       "allOf": [

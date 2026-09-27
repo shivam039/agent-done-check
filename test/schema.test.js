@@ -63,7 +63,14 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
   jsonPointerConfig.checks[0].expected = null;
   assert.equal(validateConfig(jsonPointerConfig), false);
   delete jsonPointerConfig.checks[0].expected;
-  jsonPointerConfig.checks[0].pointer = '/bad~2escape';
+  const httpJsonConfig = { version: 1, criteria: [{ id: 'http', description: 'HTTP JSON assertion.' }], checks: [{ id: 'json', type: 'http', url: 'https://example.invalid/data', bodyJsonPointerEquals: { pointer: '/items/0', expected: null }, criteria: ['http'] }] };
+  assertValid(validateConfig, httpJsonConfig, 'HTTP JSON Pointer config');
+  httpJsonConfig.checks[0].bodyJsonPointerEquals.pointer = '/bad~2';
+  assert.equal(validateConfig(httpJsonConfig), false);
+  httpJsonConfig.checks[0].bodyJsonPointerEquals.pointer = '';
+  httpJsonConfig.checks[0].bodyJsonPointerEquals.extra = true;
+  assert.equal(validateConfig(httpJsonConfig), false);
+    jsonPointerConfig.checks[0].pointer = '/bad~2escape';
   assert.equal(validateConfig(jsonPointerConfig), false);
   const invalid = { version: 2, criteria: [], checks: [] };
   assert.equal(validateConfig(invalid), false);
@@ -140,9 +147,11 @@ test('HTTP report schema describes nullable match results while staying backward
   assertValid(validateReport, report, 'HTTP report without assertions');
   report.checks[0].http.responseHeadersMatched = { 'x-mode': true };
   report.checks[0].http.bodySha256Matched = true;
+  report.checks[0].http.bodyJsonPointerMatched = true;
   assertValid(validateReport, report, 'HTTP report with matching assertions');
   report.checks[0].http.responseHeadersMatched = { 'x-mode': false };
   report.checks[0].http.bodySha256Matched = false;
+  report.checks[0].http.bodyJsonPointerMatched = false;
   assertValid(validateReport, report, 'HTTP report with failed assertions');
   report.checks[0].http.responseHeadersMatched = { 'bad name': true };
   assert.equal(validateReport(report), false);
