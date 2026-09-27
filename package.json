@@ -1,7 +1,7 @@
 {
   "name": "agent-done-check",
   "version": "0.31.0",
-  "description": "Commit-bound acceptance checks for agent-assisted software changes",
+  "description": "Verify commit-bound acceptance criteria with commands, files, HTTP, and optional Playwright checks.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -11,6 +11,7 @@
     "agent-done-check": "bin/agent-done-check.js"
   },
   "files": [
+    "CHANGELOG.md",
     "LICENSE",
     "README.md",
     "ROADMAP.md",
@@ -56,15 +57,30 @@
     "test": "node --test"
   },
   "keywords": [
-    "verification",
     "acceptance-criteria",
-    "ci",
     "agent",
-    "testing"
+    "ci",
+    "cli",
+    "commit-verification",
+    "http-checks",
+    "playwright",
+    "testing",
+    "verification",
+    "worktree"
   ],
   "homepage": "https://github.com/shivam039/agent-done-check",
   "devDependencies": {
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shivam039/agent-done-check.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shivam039/agent-done-check/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

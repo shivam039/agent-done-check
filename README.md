@@ -4,6 +4,10 @@ Agent Done Check is a local and CI tool for checking whether a specific Git comm
 
 It does not decide whether requirements are complete on its own, inspect an AI agent's conversation, or modify application code. A passing result means only that the configured checks passed.
 
+> **Experimental:** Agent Done Check is pre-1.0. Contracts may change between minor releases; review the [compatibility policy](./docs/compatibility.md) before upgrading.
+
+See the [changelog](./CHANGELOG.md) for release history.
+
 ## Requirements
 
 - Node.js 22 or newer
@@ -11,7 +15,7 @@ It does not decide whether requirements are complete on its own, inspect an AI a
 
 ## Install and run
 
-The package is not published to npm yet. From this checkout, run:
+After an experimental 0.x npm release, install the CLI with `npm install --save-dev agent-done-check` and run `npx agent-done-check --config agent-done-check.json`. Until the first npm release is published, run it from a checkout:
 
 ```sh
 npm install
@@ -51,7 +55,7 @@ Checks receive a small platform baseline environment by default (`PATH` and temp
 
 Playwright checks use the `type: "playwright"` configuration shown in [`agent-done-check.browser.example.json`](./agent-done-check.browser.example.json). They support `click`, `fill`, `check`, `uncheck`, `selectOption`, `press`, `expectVisible`, `expectHidden`, `expectText`, `expectValue`, and `expectUrl` steps.
 
-The target URL must already be reachable. To count as passed, the page must expose the exact requested commit SHA through the configured `commitAssertion`; otherwise the result is `unverified`. The temporary worktree needs Playwright and its browser installed. Use `setupCommand` for installation. Browser checks capture a viewport screenshot by default and record page errors, console errors, failed requests, and HTTP error responses. Uncaught page errors fail by default; the other diagnostics fail a check only when their `failOn...` option is set to `true`. The browser example contains placeholder URL and login values; replace them with a test environment and never commit real credentials.
+The target URL must already be reachable. To count as passed, the page must expose the exact requested commit SHA through the configured `commitAssertion`; otherwise the result is `unverified`. Playwright remains an optional external runtime so command, file, and HTTP users do not download browser dependencies. For browser checks, install Playwright in the target project (for example, `npm install --save-dev playwright && npx playwright install chromium`) or use the check’s `setupCommand` to install it in the temporary worktree. Pin Playwright and the browser version in CI for reproducible runs. Browser checks capture a viewport screenshot by default and record page errors, console errors, failed requests, and HTTP error responses. Uncaught page errors fail by default; the other diagnostics fail a check only when their `failOn...` option is set to `true`. The browser example contains placeholder URL and login values; replace them with a test environment and never commit real credentials.
 
 ## Results and safety
 
