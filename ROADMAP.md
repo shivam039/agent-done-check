@@ -146,10 +146,16 @@ PRD: [`docs/PRD-0.25.0-http-json-pointer.md`](./docs/PRD-0.25.0-http-json-pointe
 
 - Compare a typed JSON value at an RFC 6901 pointer in a bound HTTP response.
 
-## Current release work: 0.26.0 — Multiple acceptable HTTP statuses
+## Completed: 0.26.0 — Multiple acceptable HTTP statuses
 
 PRD: [`docs/PRD-0.26.0-http-status-list.md`](./docs/PRD-0.26.0-http-status-list.md)
 
 - Accept a bounded list of exact HTTP response status codes per check.
+
+## Current release work: 0.27.0 — Shell-free argv commands
+
+PRD: [`docs/PRD-0.27.0-argv-commands.md`](./docs/PRD-0.27.0-argv-commands.md)
+
+- Let command checks pass program and arguments directly without a shell.
 
 ## Later

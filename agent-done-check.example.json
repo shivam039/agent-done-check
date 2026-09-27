@@ -2,19 +2,43 @@
   "version": 1,
   "timeoutMs": 120000,
   "criteria": [
-    { "id": "test-suite", "description": "The project's automated tests pass." },
-    { "id": "lint", "description": "The project's lint check passes." }
+    {
+      "id": "test-suite",
+      "description": "The project's automated tests pass."
+    },
+    {
+      "id": "lint",
+      "description": "The project's lint check passes."
+    },
+    {
+      "id": "runtime",
+      "description": "The Node.js runtime is available."
+    }
   ],
   "checks": [
     {
       "id": "unit-tests",
       "command": "npm ci && npm test",
-      "criteria": ["test-suite"]
+      "criteria": [
+        "test-suite"
+      ]
     },
     {
       "id": "lint-check",
       "command": "npm ci && npm run lint",
-      "criteria": ["lint"]
+      "criteria": [
+        "lint"
+      ]
+    },
+    {
+      "id": "runtime-version",
+      "command": [
+        "node",
+        "--version"
+      ],
+      "criteria": [
+        "runtime"
+      ]
     }
   ]
 }

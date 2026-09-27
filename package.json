@@ -1,6 +1,6 @@
 {
   "name": "agent-done-check",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "description": "Commit-bound acceptance checks for agent-assisted software changes",
   "license": "MIT",
   "type": "module",
@@ -44,7 +44,8 @@
     "docs/PRD-0.23.0-http-body-limit.md",
     "docs/PRD-0.24.0-json-pointer-exists.md",
     "docs/PRD-0.25.0-http-json-pointer.md",
-    "docs/PRD-0.26.0-http-status-list.md"
+    "docs/PRD-0.26.0-http-status-list.md",
+    "docs/PRD-0.27.0-argv-commands.md"
   ],
   "scripts": {
     "start": "node ./bin/agent-done-check.js",
