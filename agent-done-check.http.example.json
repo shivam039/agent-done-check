@@ -4,7 +4,7 @@
   "criteria": [
     {
       "id": "deployment",
-      "description": "The deployment serves the verified commit and expected health response."
+      "description": "The deployment serves the verified commit and expected health data."
     }
   ],
   "checks": [
@@ -19,6 +19,18 @@
       ],
       "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "maxBodyBytes": 65536
+    },
+    {
+      "id": "health-data",
+      "type": "http",
+      "url": "https://example.invalid/health.json",
+      "bodyJsonPointerEquals": {
+        "pointer": "/status",
+        "expected": "healthy"
+      },
+      "criteria": [
+        "deployment"
+      ]
     }
   ]
 }

@@ -954,6 +954,66 @@ test('HTTP body digest assertions compare bounded raw bytes after binding and va
   assert.equal(invalid.code, 2);
 });
 
+test('HTTP JSON Pointer assertions are typed, commit-bound, bounded, and private', async (t) => {
+  const root = await repository(t);
+  let targetCommit;
+  const expectedSecret = 'private-json-response-value';
+  const jsonBody = JSON.stringify(JSON.parse(`{"a/b":{"~key":{"items":[null,false],"name":${JSON.stringify(expectedSecret)}}},"__proto__":{"safe":true}}`));
+  const server = createServer((request, response) => {
+    if (request.url === '/unbound') { response.end(jsonBody); return; }
+    response.setHeader('x-agent-done-check-commit', targetCommit);
+    if (request.url === '/malformed') { response.end('{bad json'); return; }
+    if (request.url === '/invalid-utf8') { response.end(Buffer.from([0xff, 0xfe])); return; }
+    if (request.url === '/too-large') { response.end(Buffer.alloc(32, 65)); return; }
+    response.end(jsonBody);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const port = server.address().port;
+  const expectedObject = JSON.parse(`{"name":${JSON.stringify(expectedSecret)},"items":[null,false]}`);
+  const base = (id, route, assertion) => ({ id, type: 'http', url: `http://127.0.0.1:${port}${route}`, bodyJsonPointerEquals: assertion, criteria: ['json-http'] });
+  const config = {
+    version: 1,
+    criteria: [{ id: 'json-http', description: 'The response JSON contains the expected value.' }],
+    checks: [
+      base('match', '/match', { pointer: '/a~1b/~0key', expected: expectedObject }),
+      base('null', '/null', { pointer: '/a~1b/~0key/items/0', expected: null }),
+      base('wrong-type', '/wrong-type', { pointer: '/a~1b/~0key/items/1', expected: 'false' }),
+      base('missing', '/missing', { pointer: '/missing', expected: true }),
+      base('prototype-key', '/prototype', { pointer: '/__proto__/safe', expected: true }),
+      base('malformed', '/malformed', { pointer: '', expected: {} }),
+      base('invalid-utf8', '/invalid-utf8', { pointer: '', expected: {} }),
+      base('unbound', '/unbound', { pointer: '', expected: {} }),
+      { ...base('too-large', '/too-large', { pointer: '', expected: {} }), maxBodyBytes: 8 },
+    ],
+  };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', '.'); git(root, 'commit', '--quiet', '-m', 'HTTP JSON assertion config');
+  targetCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const result = await invokeAsync(root, ['--commit', targetCommit, '--sarif-output', 'report.sarif', '--junit-output', 'report.xml']);
+  assert.equal(result.code, 1);
+  const checks = Object.fromEntries(result.report.checks.map((check) => [check.id, check]));
+  for (const id of ['match', 'null', 'prototype-key']) assert.equal(checks[id].status, 'passed', id);
+  for (const id of ['wrong-type', 'missing', 'malformed']) assert.equal(checks[id].status, 'failed', id);
+  for (const id of ['invalid-utf8', 'unbound', 'too-large']) assert.equal(checks[id].status, 'unverified', id);
+  assert.equal(checks.match.http.bodyJsonPointerMatched, true);
+  assert.equal(checks['wrong-type'].http.bodyJsonPointerMatched, false);
+  assert.equal(checks.unbound.http.bodyJsonPointerMatched, null);
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  const sarif = await readFile(path.join(root, 'report.sarif'), 'utf8');
+  const junit = await readFile(path.join(root, 'report.xml'), 'utf8');
+  for (const value of [expectedSecret, '/a~1b/~0key']) {
+    for (const output of [JSON.stringify(result.report), markdown, sarif, junit]) assert.ok(!output.includes(value), value);
+  }
+
+  config.checks[0].bodyJsonPointerEquals = { pointer: '/bad~2', expected: true };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  assert.equal((await invoke(root, ['--validate'])).code, 2);
+  config.checks[0].bodyJsonPointerEquals = { pointer: '', extra: 1 };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  assert.equal((await invoke(root, ['--validate'])).code, 2);
+});
+
 test('HTTP response header assertions run only after commit binding and keep values private', async (t) => {
   const root = await repository(t);
   let targetCommit;
