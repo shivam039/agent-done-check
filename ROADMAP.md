@@ -50,11 +50,17 @@ PRD: [`docs/PRD-0.9.0-report-bundle-verification.md`](./docs/PRD-0.9.0-report-bu
 
 - Verify manifest paths, byte counts, hashes, and report identity without rerunning checks.
 
-## Current release work: 0.10.0 — SARIF export
+## Completed: 0.10.0 — SARIF export
 
 PRD: [`docs/PRD-0.10.0-sarif-export.md`](./docs/PRD-0.10.0-sarif-export.md)
 
 - Export failed and unverified checks as SARIF 2.1.0 and include it in the bundle manifest.
+
+## Current release work: 0.11.0 — JUnit XML export
+
+PRD: [`docs/PRD-0.11.0-junit-export.md`](./docs/PRD-0.11.0-junit-export.md)
+
+- Export one JUnit test case per configured check and include the report in the evidence manifest.
 
 ## Later
 

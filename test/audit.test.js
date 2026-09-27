@@ -646,3 +646,36 @@ test('SARIF output maps non-passing checks, excludes captured output, and enters
   const verified = invokeBundle(root, path.join(root, '.agent-done-check/manifest.json'));
   assert.equal(verified.code, 0, JSON.stringify(verified.output));
 });
+
+test('JUnit XML maps every check safely and enters the manifest', async (t) => {
+  const root = await repository(t);
+  const config = {
+    version: 1,
+    criteria: [{ id: 'acceptance', description: '<private>& criterion text' }],
+    checks: [
+      { id: 'pass-check', command: 'node --version', criteria: ['acceptance'] },
+      { id: 'fail-check', command: nodeCommand("console.log('<private>&output'); process.exit(1)"), criteria: ['acceptance'] },
+      { id: 'unverified-check', type: 'http', url: 'http://127.0.0.1:1/unavailable', criteria: ['acceptance'] },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root, ['--junit-output', '.agent-done-check/results.xml']);
+  assert.equal(result.code, 1, result.stderr || JSON.stringify(result.report?.checks));
+  const xml = await readFile(path.join(root, '.agent-done-check/results.xml'), 'utf8');
+  assert.match(xml, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  assert.match(xml, /<testsuites tests="3" failures="1" errors="0" skipped="1"/);
+  assert.match(xml, /<property name="targetCommit" value="[a-f0-9]{40}"\/>/);
+  assert.match(xml, /<testcase classname="agent-done-check" name="pass-check" time="[0-9.]+"\/>/);
+  assert.match(xml, /<testcase classname="agent-done-check" name="fail-check" time="[0-9.]+"><failure message="check failed"\/><\/testcase>/);
+  assert.match(xml, /<testcase classname="agent-done-check" name="unverified-check" time="[0-9.]+"><skipped message="check unverified"\/><\/testcase>/);
+  assert.ok(!xml.includes('<private>'));
+  assert.ok(!xml.includes('&output'));
+  const manifest = JSON.parse(await readFile(path.join(root, '.agent-done-check/manifest.json'), 'utf8'));
+  const artifact = manifest.artifacts.find((item) => item.role === 'junit-report');
+  assert.ok(artifact);
+  assert.equal(artifact.sha256, createHash('sha256').update(await readFile(path.join(root, '.agent-done-check/results.xml'))).digest('hex'));
+  assert.equal(invokeBundle(root, path.join(root, '.agent-done-check/manifest.json')).code, 0);
+  const collision = await invoke(root, ['--junit-output', '.agent-done-check/report.json']);
+  assert.equal(collision.code, 2);
+  assert.match(collision.stderr, /distinct paths/);
+});

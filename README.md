@@ -115,3 +115,7 @@ Run `node ./bin/agent-done-check.js --verify-bundle` to check `.agent-done-check
 ### Export SARIF
 
 Pass `--sarif-output <file>` during a normal audit to write a SARIF 2.1.0 log. Failed checks appear as `error` results and unverified checks as `warning`; passed checks are omitted. SARIF messages include only the check ID and status, not captured command output or arbitrary check errors. The SARIF file is included in the evidence manifest. See the [OASIS SARIF 2.1.0 specification](https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html).
+
+### Export JUnit XML
+
+Pass `--junit-output <file>` during a normal audit to write one testcase per configured check. Passed checks are successful cases, failed checks use `<failure>`, and unverified checks use `<skipped>`. The XML contains the run ID, target commit, and durations, but not captured command output or arbitrary check errors. The JUnit file is included in the evidence manifest. The [GitHub Actions example](./examples/github-actions.yml) writes both SARIF and JUnit files and uploads the report directory as a workflow artifact.

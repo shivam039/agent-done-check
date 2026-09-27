@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
       - name: Verify this commit
-        run: node ./bin/agent-done-check.js --config agent-done-check.json --commit "$GITHUB_SHA"
+        run: node ./bin/agent-done-check.js --config agent-done-check.json --commit "$GITHUB_SHA" --sarif-output .agent-done-check/results.sarif --junit-output .agent-done-check/junit.xml
       - name: Upload verification report and evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
