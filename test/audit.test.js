@@ -56,7 +56,12 @@ async function invoke(root) {
     });
     return { code: 0, stdout };
   } catch (error) {
-    return { code: error.status ?? 2, stdout: error.stdout?.toString() ?? '', stderr: error.stderr?.toString() ?? '' };
+    const stdout = error.stdout?.toString() ?? '';
+    const stderr = error.stderr?.toString() ?? '';
+    let report;
+    try { report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8')); }
+    catch { /* Config and setup failures do not always produce a report. */ }
+    return { code: error.status ?? 2, stdout, stderr, report };
   }
 }
 
@@ -69,7 +74,7 @@ test('command report, evidence files, and manifest hashes agree', async (t) => {
   });
 
   const result = await invoke(root);
-  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks) || result.stdout);
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   const manifest = JSON.parse(await readFile(path.join(root, '.agent-done-check/manifest.json'), 'utf8'));
   assert.equal(report.status, 'passed');
@@ -102,7 +107,7 @@ test('checks receive only baseline and explicitly allowed host environment; mark
   await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
 
   const result = await invoke(root);
-  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks) || result.stdout);
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.deepEqual(JSON.parse(report.checks[0].stdout), {
     host: null,
@@ -203,7 +208,7 @@ module.exports = {
   });
 
   const result = await invoke(root);
-  assert.equal(result.code, 1, result.stderr);
+  assert.equal(result.code, 1, result.stderr || JSON.stringify(result.report?.checks) || result.stdout);
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   const manifest = JSON.parse(await readFile(path.join(root, '.agent-done-check/manifest.json'), 'utf8'));
   const check = report.checks[0];
@@ -232,7 +237,7 @@ test('timeout terminates descendant processes and marks the criterion unverified
   await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
 
   const result = await invoke(root);
-  assert.equal(result.code, 1, result.stderr);
+  assert.equal(result.code, 1, result.stderr || JSON.stringify(result.report?.checks) || result.stdout);
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.status, 'unverified');
   await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -248,7 +253,7 @@ test('completed commands do not leave detached descendants running', async (t) =
   await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
 
   const result = await invoke(root);
-  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks) || result.stdout);
   await new Promise((resolve) => setTimeout(resolve, 1900));
   await assert.rejects(readFile(marker), { code: 'ENOENT' });
 });
@@ -294,7 +299,7 @@ test('captured output limit is enforced in bytes and reports truncation', async 
   await commitFiles(root, { 'agent-done-check.json': JSON.stringify(baseConfig({ command })) });
 
   const result = await invoke(root);
-  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks) || result.stdout);
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.checks[0].outputTruncated.stdout, true);
   assert.ok(Buffer.byteLength(report.checks[0].stdout, 'utf8') <= 24_000);
