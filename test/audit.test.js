@@ -124,6 +124,36 @@ test('command report, evidence files, and manifest hashes agree', async (t) => {
   assert.match(markdown, /&lt;img/);
 });
 
+test('command checks pass only on their configured expected exit code', async (t) => {
+  const root = await repository(t);
+  const config = {
+    version: 1,
+    criteria: [{ id: 'exit-codes', description: 'Configured process exit codes determine command success.' }],
+    checks: [
+      { id: 'default-zero', command: nodeCommand('process.exit(0)'), criteria: ['exit-codes'] },
+      { id: 'expected-seven', command: nodeCommand('process.exit(7)'), expectedExitCode: 7, criteria: ['exit-codes'] },
+      { id: 'unexpected-seven', command: nodeCommand('process.exit(7)'), expectedExitCode: 0, criteria: ['exit-codes'] },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root);
+  assert.equal(result.code, 1);
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  const checks = Object.fromEntries(report.checks.map((check) => [check.id, check]));
+  assert.equal(checks['default-zero'].status, 'passed');
+  assert.equal(checks['default-zero'].expectedExitCode, 0);
+  assert.equal(checks['expected-seven'].exitCode, 7);
+  assert.equal(checks['expected-seven'].expectedExitCode, 7);
+  assert.equal(checks['expected-seven'].status, 'passed');
+  assert.equal(checks['unexpected-seven'].status, 'failed');
+  assert.equal(checks['unexpected-seven'].exitCode, 7);
+  config.checks[1].expectedExitCode = 256;
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const invalidCode = await invoke(root);
+  assert.equal(invalidCode.code, 2);
+  assert.match(invalidCode.stderr, /expectedExitCode/);
+});
+
 test('file checks verify exact committed bytes with bounded redacted evidence', async (t) => {
   const root = await repository(t);
   const content = 'release=0.6\n';

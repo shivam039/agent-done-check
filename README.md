@@ -119,3 +119,7 @@ Pass `--sarif-output <file>` during a normal audit to write a SARIF 2.1.0 log. F
 ### Export JUnit XML
 
 Pass `--junit-output <file>` during a normal audit to write one testcase per configured check. Passed checks are successful cases, failed checks use `<failure>`, and unverified checks use `<skipped>`. The XML contains the run ID, target commit, and durations, but not captured command output or arbitrary check errors. The JUnit file is included in the evidence manifest. The [GitHub Actions example](./examples/github-actions.yml) writes both SARIF and JUnit files and uploads the report directory as a workflow artifact.
+
+### Expected command exit code
+
+Command checks pass on exit code 0 by default. Set `expectedExitCode` on a command check to use a different integer from 0 through 255. A different completed exit code fails; a timeout remains unverified. The check result records the expected value. This option applies only to command checks.

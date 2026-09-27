@@ -538,6 +538,10 @@ function validate(config) {
     const checkType = check.type ?? 'command';
     if (!['command', 'playwright', 'file', 'http'].includes(checkType)) errors.push(`${at}.type: expected "command", "playwright", "file", or "http".`);
     if (checkType === 'command' && (typeof check.command !== 'string' || !check.command.trim())) errors.push(`${at}.command: must be a non-empty string.`);
+    if (typeof check.expectedExitCode !== 'undefined') {
+      if (checkType !== 'command') errors.push(`${at}.expectedExitCode: is supported only for command checks.`);
+      if (!Number.isInteger(check.expectedExitCode) || check.expectedExitCode < 0 || check.expectedExitCode > 255) errors.push(`${at}.expectedExitCode: must be an integer from 0 to 255.`);
+    }
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
       if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
@@ -789,6 +793,8 @@ export async function main(argv = process.argv.slice(2)) {
             env: verificationEnv(config, commit),
             timeoutMs,
           });
+          result.expectedExitCode = check.expectedExitCode ?? 0;
+          result.status = result.signal === 'TIMEOUT' ? 'unverified' : result.code === result.expectedExitCode ? 'passed' : 'failed';
         }
         redactResult(result, secretsToRedact);
         const mutation = await worktreeMutation(worktree, commit);
@@ -805,6 +811,7 @@ export async function main(argv = process.argv.slice(2)) {
           status: result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed'),
           error: result.error,
           exitCode: result.code,
+          expectedExitCode: (check.type ?? 'command') === 'command' ? check.expectedExitCode ?? 0 : undefined,
           signal: result.signal,
           startedAt: checkStarted,
           durationMs: Date.now() - Date.parse(checkStarted),

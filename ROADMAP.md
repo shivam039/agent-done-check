@@ -62,6 +62,12 @@ PRD: [`docs/PRD-0.11.0-junit-export.md`](./docs/PRD-0.11.0-junit-export.md)
 
 - Export one JUnit test case per configured check and include the report in the evidence manifest.
 
+## Current release work: 0.12.0 — Expected command exit codes
+
+PRD: [`docs/PRD-0.12.0-expected-exit-code.md`](./docs/PRD-0.12.0-expected-exit-code.md)
+
+- Allow command checks to pass on a selected process exit code while preserving timeout semantics.
+
 ## Later
 
 - Add check adapters only when their revision binding and evidence semantics are clear.
