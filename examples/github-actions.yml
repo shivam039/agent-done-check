@@ -1,0 +1,26 @@
+name: Verify completion claims
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  commitproof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run independent verification
+        run: npx --yes commitproof-cli@0.3.0 --commit "$GITHUB_SHA"
+      - name: Upload verification report and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commitproof-report
+          path: .commitproof/
+          if-no-files-found: ignore

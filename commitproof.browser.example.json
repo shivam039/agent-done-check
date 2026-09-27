@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "timeoutMs": 120000,
+  "criteria": [
+    {
+      "id": "sign-in-flow",
+      "description": "A user can sign in and reach the dashboard."
+    }
+  ],
+  "checks": [
+    {
+      "id": "sign-in-browser",
+      "type": "playwright",
+      "url": "https://staging.example.com/login",
+      "browser": "chromium",
+      "commitAssertion": {
+        "selector": "meta[name=commit-sha]",
+        "attribute": "content"
+      },
+      "setupCommand": "npm ci && npx playwright install chromium",
+      "steps": [
+        { "action": "fill", "selector": "[name=email]", "value": "smoke@example.com" },
+        { "action": "fill", "selector": "[name=password]", "value": "replace-with-test-credential" },
+        { "action": "click", "selector": "button[type=submit]" },
+        { "action": "expectUrl", "value": "/dashboard" },
+        { "action": "expectVisible", "selector": "h1" },
+        { "action": "expectText", "selector": "h1", "value": "Dashboard" }
+      ],
+      "failOnConsoleError": false,
+      "failOnPageError": true,
+      "failOnRequestFailure": false,
+      "failOnHttpError": false
+    }
+  ]
+}

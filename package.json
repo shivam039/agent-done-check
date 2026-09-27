@@ -1,0 +1,35 @@
+{
+  "name": "commitproof-cli",
+  "version": "0.3.0",
+  "description": "Independent, commit-bound verification reports for software changes",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "commitproof": "bin/commitproof.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "ROADMAP.md",
+    "LICENSE",
+    "commitproof.example.json",
+    "commitproof.browser.example.json",
+    "examples"
+  ],
+  "scripts": {
+    "start": "node ./bin/commitproof.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "verification",
+    "acceptance-criteria",
+    "ci",
+    "agent",
+    "testing"
+  ],
+  "homepage": "https://www.npmjs.com/package/commitproof-cli"
+}

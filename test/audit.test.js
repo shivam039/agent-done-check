@@ -1,0 +1,247 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const cliPath = path.join(packageRoot, 'bin', 'commitproof.js');
+
+function git(cwd, ...args) {
+  execFileSync('git', args, { cwd, stdio: 'ignore' });
+}
+
+async function repository(t) {
+  const root = await mkdtemp(path.join(tmpdir(), 'commitproof-audit-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  git(root, 'init', '--quiet');
+  git(root, 'config', 'user.name', 'CommitProof Audit');
+  git(root, 'config', 'user.email', 'audit@example.invalid');
+  return root;
+}
+
+function baseConfig(check) {
+  return {
+    version: 1,
+    timeoutMs: 5000,
+    criteria: [{ id: 'behavior', description: 'Configured behavior is verified.' }],
+    checks: [{ id: 'behavior-check', criteria: ['behavior'], ...check }],
+  };
+}
+
+function nodeCommand(source) {
+  const encoded = Buffer.from(source).toString('base64');
+  return `node -e "eval(Buffer.from('${encoded}', 'base64').toString())"`;
+}
+
+async function commitFiles(root, files) {
+  for (const [relative, contents] of Object.entries(files)) {
+    const file = path.join(root, relative);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, contents);
+  }
+  git(root, 'add', '.');
+  git(root, 'commit', '--quiet', '-m', 'fixture');
+}
+
+async function invoke(root) {
+  try {
+    const stdout = execFileSync(process.execPath, [cliPath, '--config', 'commitproof.json'], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    return { code: 0, stdout };
+  } catch (error) {
+    return { code: error.status ?? 2, stdout: error.stdout?.toString() ?? '', stderr: error.stderr?.toString() ?? '' };
+  }
+}
+
+test('command report, evidence files, and manifest hashes agree', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ command: nodeCommand('console.log("evidence-ok")') });
+  config.criteria[0].description = '<img src=x onerror=alert(1)> | behavior';
+  await commitFiles(root, {
+    'commitproof.json': JSON.stringify(config),
+  });
+
+  const result = await invoke(root);
+  assert.equal(result.code, 0, result.stderr);
+  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  const manifest = JSON.parse(await readFile(path.join(root, '.commitproof/manifest.json'), 'utf8'));
+  assert.equal(report.status, 'passed');
+  assert.equal(report.checks[0].stdout.trim(), 'evidence-ok');
+  assert.equal(manifest.runId, report.runId);
+  assert.ok(manifest.artifacts.some((artifact) => artifact.role === 'markdown-report'));
+  const stdoutArtifact = manifest.artifacts.find((artifact) => artifact.role === 'stdout');
+  assert.ok(stdoutArtifact);
+  const stdoutBytes = await readFile(path.join(root, '.commitproof', stdoutArtifact.path));
+  assert.equal(stdoutArtifact.sha256, createHash('sha256').update(stdoutBytes).digest('hex'));
+  const markdown = await readFile(path.join(root, '.commitproof/report.md'), 'utf8');
+  assert.ok(!markdown.includes('<img'));
+  assert.match(markdown, /&lt;img/);
+});
+
+test('invalid browser URL is rejected before a worktree is created', async (t) => {
+  const root = await repository(t);
+  await commitFiles(root, {
+    'commitproof.json': JSON.stringify(baseConfig({ type: 'playwright', url: 'http://', steps: [{ action: 'expectUrl', value: '/' }] })),
+  });
+  const result = await invoke(root);
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /checks\[0\]\.url/);
+});
+
+test('Playwright setup runs once and browser screenshot and diagnostics are bound into evidence', async (t) => {
+  const root = await repository(t);
+  const fakePlaywright = `
+const fs = require('node:fs');
+module.exports = {
+  chromium: {
+    launch: async () => ({
+      version: () => 'fake-chromium-1',
+      close: async () => {},
+      newContext: async () => ({
+        newPage: async () => {
+          const handlers = {};
+          return {
+            setDefaultTimeout: () => {},
+            on: (event, handler) => { handlers[event] = handler; },
+            goto: async (url) => {
+              if (fs.readFileSync(process.env.SETUP_MARKER, 'utf8') !== 'x') throw new Error('setup did not run exactly once');
+              handlers.response({ status: () => 401, url: () => url });
+            },
+            waitForURL: async () => {},
+            locator: () => ({ first() { return this; }, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async () => process.env.COMMITPROOF_TARGET_COMMIT }),
+            screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
+          };
+        },
+      }),
+    }),
+  },
+};
+`;
+  const config = baseConfig({
+    type: 'playwright',
+    url: 'https://user:password@staging.example.test/dashboard?token=do-not-report#secret',
+    commitAssertion: { selector: 'meta[name=commit-sha]', attribute: 'content' },
+    setupCommand: nodeCommand('require("node:fs").appendFileSync(process.env.SETUP_MARKER, "x")'),
+    steps: [{ action: 'expectUrl', value: '/dashboard' }],
+    failOnHttpError: false,
+  });
+  config.criteria.push({ id: 'unbound', description: 'An unbound URL cannot pass as commit evidence.' });
+  config.checks.push({
+    id: 'unbound-browser',
+    type: 'playwright',
+    url: 'https://staging.example.test/dashboard',
+    steps: [{ action: 'expectUrl', value: '/dashboard' }],
+    screenshot: false,
+    criteria: ['unbound'],
+  });
+  config.env = { SETUP_MARKER: path.join(root, 'setup.count') };
+  await commitFiles(root, {
+    'commitproof.json': JSON.stringify(config),
+    'package.json': JSON.stringify({ name: 'fixture', version: '1.0.0' }),
+    'node_modules/playwright/package.json': JSON.stringify({ name: 'playwright', version: '0.0.0', main: 'index.js' }),
+    'node_modules/playwright/index.js': fakePlaywright,
+  });
+
+  const result = await invoke(root);
+  assert.equal(result.code, 1, result.stderr);
+  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  const manifest = JSON.parse(await readFile(path.join(root, '.commitproof/manifest.json'), 'utf8'));
+  const check = report.checks[0];
+  assert.equal(report.status, 'unverified');
+  assert.equal(check.browser.diagnostics.browserVersion, 'fake-chromium-1');
+  assert.equal(check.browser.diagnostics.httpErrors.length, 1);
+  assert.equal(check.browser.revisionBinding.status, 'verified');
+  assert.equal(check.browser.url, 'https://staging.example.test/dashboard');
+  assert.ok(!JSON.stringify(report).includes('do-not-report'));
+  assert.ok(!JSON.stringify(report).includes('password'));
+  assert.equal(check.browser.artifacts[0].role, 'browser-screenshot');
+  assert.ok(manifest.artifacts.some((artifact) => artifact.role === 'browser-screenshot' && artifact.sha256));
+  assert.equal(report.checks[1].status, 'unverified');
+  assert.equal(report.checks[1].browser.revisionBinding.status, 'unverified');
+  assert.match(await readFile(path.join(root, '.commitproof/report.md'), 'utf8'), /browser-screenshot/);
+});
+
+test('timeout terminates descendant processes and marks the criterion unverified', async (t) => {
+  const root = await repository(t);
+  const marker = path.join(root, 'late-child.marker');
+  const script = `const { spawn } = require('node:child_process'); spawn(process.execPath, ['-e', 'setTimeout(() => require("node:fs").writeFileSync(process.env.MARKER, "late"), 1800)']); setTimeout(() => {}, 10000);`;
+  const command = nodeCommand(script);
+  const config = baseConfig({ command, timeoutMs: 1000 });
+  config.env = { MARKER: marker };
+  await commitFiles(root, { 'commitproof.json': JSON.stringify(config) });
+
+  const result = await invoke(root);
+  assert.equal(result.code, 1, result.stderr);
+  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  assert.equal(report.status, 'unverified');
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  await assert.rejects(readFile(marker), { code: 'ENOENT' });
+});
+
+test('completed commands do not leave detached descendants running', async (t) => {
+  const root = await repository(t);
+  const marker = path.join(root, 'orphan.marker');
+  const child = `spawn(process.execPath, ['-e', 'setTimeout(() => require("node:fs").writeFileSync(process.env.MARKER, "late"), 1600)'], { stdio: "ignore" }).unref();`;
+  const config = baseConfig({ command: nodeCommand(`const { spawn } = require("node:child_process"); ${child}`) });
+  config.env = { MARKER: marker };
+  await commitFiles(root, { 'commitproof.json': JSON.stringify(config) });
+
+  const result = await invoke(root);
+  assert.equal(result.code, 0, result.stderr);
+  await new Promise((resolve) => setTimeout(resolve, 1900));
+  await assert.rejects(readFile(marker), { code: 'ENOENT' });
+});
+
+test('a failed check takes precedence over another unverified check for one criterion', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ command: nodeCommand('process.exit(7)') });
+  config.checks.push({ id: 'slow-check', command: nodeCommand('setTimeout(() => {}, 30000)'), timeoutMs: 1000, criteria: ['behavior'] });
+  await commitFiles(root, { 'commitproof.json': JSON.stringify(config) });
+
+  const result = await invoke(root);
+  assert.equal(result.code, 1);
+  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  assert.equal(report.checks[0].status, 'failed');
+  assert.equal(report.checks[1].status, 'unverified');
+  assert.equal(report.criteria[0].status, 'failed');
+  assert.equal(report.status, 'failed');
+});
+
+test('checks get fresh worktrees and source-changing checks cannot pass', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ command: nodeCommand('require("node:fs").writeFileSync("source.txt", "changed")') });
+  config.criteria.push({ id: 'fresh-source', description: 'Each check starts from the same commit.' });
+  config.checks.push({
+    id: 'source-isolation',
+    command: nodeCommand('if (require("node:fs").readFileSync("source.txt", "utf8") !== "original") process.exit(9)'),
+    criteria: ['fresh-source'],
+  });
+  await commitFiles(root, { 'commitproof.json': JSON.stringify(config), 'source.txt': 'original' });
+
+  const result = await invoke(root);
+  assert.equal(result.code, 1);
+  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  assert.equal(report.checks[0].status, 'unverified');
+  assert.match(report.checks[0].error, /tracked files changed/);
+  assert.equal(report.checks[1].status, 'passed');
+  assert.equal(report.criteria[1].status, 'passed');
+});
+
+test('captured output limit is enforced in bytes and reports truncation', async (t) => {
+  const root = await repository(t);
+  const command = nodeCommand('process.stdout.write("💥".repeat(20000))');
+  await commitFiles(root, { 'commitproof.json': JSON.stringify(baseConfig({ command })) });
+
+  const result = await invoke(root);
+  assert.equal(result.code, 0, result.stderr);
+  const report = JSON.parse(await readFile(path.join(root, '.commitproof/report.json'), 'utf8'));
+  assert.equal(report.checks[0].outputTruncated.stdout, true);
+  assert.ok(Buffer.byteLength(report.checks[0].stdout, 'utf8') <= 24_000);
+});
