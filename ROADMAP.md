@@ -104,11 +104,17 @@ PRD: [`docs/PRD-0.18.0-per-check-environment.md`](./docs/PRD-0.18.0-per-check-en
 
 - Add isolated environment overrides for command checks.
 
-## Current release work: 0.19.0 — HTTP response header assertions
+## Completed: 0.19.0 — HTTP response header assertions
 
 PRD: [`docs/PRD-0.19.0-http-response-headers.md`](./docs/PRD-0.19.0-http-response-headers.md)
 
 - Verify exact response header values only after the HTTP response is bound to the target commit.
+
+## Current release work: 0.20.0 — JSON Pointer file checks
+
+PRD: [`docs/PRD-0.20.0-json-pointer-file-checks.md`](./docs/PRD-0.20.0-json-pointer-file-checks.md)
+
+- Compare typed JSON values at RFC 6901 pointers in committed files.
 
 ## Later
 

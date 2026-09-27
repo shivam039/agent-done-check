@@ -975,6 +975,67 @@ test('HTTP response header assertions run only after commit binding and keep val
   assert.equal((await validateConfig()).code, 2);
 });
 
+test('commit-bound JSON Pointer file assertions compare typed values without exposing them', async (t) => {
+  const root = await repository(t);
+  const expectedSecret = 'json-pointer-private-value';
+  const document = JSON.parse(`{"services":[{"enabled":true,"quota":null,"limits":{"burst":5,"steady":2}}],"a/b":{"~key":${JSON.stringify(expectedSecret)}},"__proto__":{"polluted":true}}`);
+  const expectedRoot = JSON.parse(`{"__proto__":{"polluted":true},"a/b":{"~key":${JSON.stringify(expectedSecret)}},"services":[{"enabled":true,"limits":{"steady":2,"burst":5},"quota":null}]}`);
+  const config = {
+    version: 1,
+    criteria: [{ id: 'json-file', description: 'Committed JSON values match their pointers.' }],
+    checks: [
+      { id: 'root-object', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '', expected: expectedRoot, criteria: ['json-file'] },
+      { id: 'boolean', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/services/0/enabled', expected: true, criteria: ['json-file'] },
+      { id: 'null', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/services/0/quota', expected: null, criteria: ['json-file'] },
+      { id: 'object-order', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/services/0/limits', expected: { steady: 2, burst: 5 }, criteria: ['json-file'] },
+      { id: 'escaped', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/a~1b/~0key', expected: expectedSecret, criteria: ['json-file'] },
+      { id: 'prototype-key', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/__proto__/polluted', expected: true, criteria: ['json-file'] },
+      { id: 'invalid-array-index', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/services/00/enabled', expected: true, criteria: ['json-file'] },
+      { id: 'wrong-type', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/services/0/enabled', expected: 'true', criteria: ['json-file'] },
+      { id: 'malformed', type: 'file', path: 'malformed.json', assertion: 'jsonPointerEquals', pointer: '', expected: {}, criteria: ['json-file'] },
+      { id: 'invalid-utf8', type: 'file', path: 'invalid.json', assertion: 'jsonPointerEquals', pointer: '', expected: {}, criteria: ['json-file'] },
+    ],
+  };
+  await commitFiles(root, {
+    'agent-done-check.json': JSON.stringify(config),
+    'data.json': JSON.stringify(document),
+    'malformed.json': '{not-json',
+    'invalid.json': Buffer.from([0xff, 0xfe]),
+  });
+  const result = await invoke(root);
+  assert.equal(result.code, 1, result.stderr || JSON.stringify(result.report?.checks));
+  const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
+  const checks = Object.fromEntries(report.checks.map((check) => [check.id, check]));
+  for (const id of ['root-object', 'boolean', 'null', 'object-order', 'escaped', 'prototype-key']) assert.equal(checks[id].status, 'passed', id);
+  assert.equal(checks['invalid-array-index'].status, 'failed');
+  assert.equal(checks['wrong-type'].status, 'failed');
+  assert.equal(checks.malformed.status, 'failed');
+  assert.equal(checks['invalid-utf8'].status, 'unverified');
+  assert.equal(checks.escaped.file.matched, true);
+  assert.ok(!JSON.stringify(report).includes(expectedSecret));
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  assert.ok(!markdown.includes(expectedSecret));
+
+  for (const pointer of ['/bad~2escape', 'no-leading-slash', '/bad~']) {
+    config.checks[0].pointer = pointer;
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    const invalid = await invoke(root, ['--validate']);
+    assert.equal(invalid.code, 2, pointer);
+    assert.match(invalid.stdout, /pointer/);
+  }
+  config.checks[0].pointer = '/'.repeat(4097);
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const oversizedPointer = await invoke(root, ['--validate']);
+  assert.equal(oversizedPointer.code, 2);
+  assert.match(oversizedPointer.stdout, /pointer/);
+  delete config.checks[0].expected;
+  config.checks[0].pointer = '';
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  const missingExpected = await invoke(root, ['--validate']);
+  assert.equal(missingExpected.code, 2);
+  assert.match(missingExpected.stdout, /expected/);
+});
+
 test('validation mode emits JSON offline and never runs configured checks', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'agent-done-check-validate-'));
   t.after(() => rm(root, { recursive: true, force: true }));

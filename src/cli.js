@@ -388,6 +388,42 @@ async function worktreeMutation(cwd, expectedCommit) {
   return null;
 }
 
+function validJsonPointer(pointer) {
+  return typeof pointer === 'string'
+    && characterCount(pointer) <= 4096
+    && (pointer === '' || pointer.startsWith('/'))
+    && !/~(?![01])/.test(pointer);
+}
+
+function resolveJsonPointer(document, pointer) {
+  const tokens = pointer === '' ? [] : pointer.slice(1).split('/').map((token) => token.replace(/~1/g, '/').replace(/~0/g, '~'));
+  let value = document;
+  for (const token of tokens) {
+    if (Array.isArray(value)) {
+      if (!/^(0|[1-9][0-9]*)$/.test(token)) return { found: false };
+      const index = Number(token);
+      if (!Number.isSafeInteger(index) || index >= value.length) return { found: false };
+      value = value[index];
+    } else if (value !== null && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, token)) {
+      value = value[token];
+    } else return { found: false };
+  }
+  return { found: true, value };
+}
+
+function jsonValuesEqual(left, right) {
+  if (left === right) return true;
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((value, index) => jsonValuesEqual(value, right[index]));
+  }
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key, index) => key === rightKeys[index] && jsonValuesEqual(left[key], right[key]));
+}
+
 async function runFileCheck(repository, commit, check) {
   const parts = check.path.split(/[\\/]/);
   const file = { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false };
@@ -424,7 +460,13 @@ async function runFileCheck(repository, commit, check) {
     let contents;
     try { contents = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
     catch { return { status: 'unverified', error: 'Text assertions require valid UTF-8 content.', file }; }
-    file.matched = check.assertion === 'equals' ? contents === check.expected : contents.includes(check.expected);
+    if (check.assertion === 'jsonPointerEquals') {
+      let document;
+      try { document = JSON.parse(contents); }
+      catch { return { status: 'failed', error: 'The committed file does not contain valid JSON.', file }; }
+      const resolved = resolveJsonPointer(document, check.pointer);
+      file.matched = resolved.found && jsonValuesEqual(resolved.value, check.expected);
+    } else file.matched = check.assertion === 'equals' ? contents === check.expected : contents.includes(check.expected);
   }
   return { status: file.matched ? 'passed' : 'failed', error: file.matched ? undefined : 'The file did not satisfy the configured assertion.', file };
 }
@@ -627,12 +669,17 @@ function validate(config) {
       }
     }
     if (typeof check.responseHeaders !== 'undefined' && checkType !== 'http') errors.push(`${at}.responseHeaders: is supported only for HTTP checks.`);
+    if (typeof check.pointer !== 'undefined' && (checkType !== 'file' || check.assertion !== 'jsonPointerEquals')) errors.push(`${at}.pointer: is supported only with the jsonPointerEquals file assertion.`);
     if (checkType === 'file') {
       if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
-      if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
+      if (!['exists', 'equals', 'contains', 'sha256', 'jsonPointerEquals'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, sha256, or jsonPointerEquals.`);
       if (['equals', 'contains', 'sha256'].includes(check.assertion) && typeof check.expected !== 'string') errors.push(`${at}.expected: must be a string for ${check.assertion}.`);
       if (check.assertion === 'sha256' && typeof check.expected === 'string' && !/^[a-f0-9]{64}$/.test(check.expected)) errors.push(`${at}.expected: sha256 requires a 64-character lowercase hexadecimal digest.`);
       if (check.assertion === 'exists' && typeof check.expected !== 'undefined') errors.push(`${at}.expected: is not used with the exists assertion.`);
+      if (check.assertion === 'jsonPointerEquals') {
+        if (!Object.prototype.hasOwnProperty.call(check, 'expected')) errors.push(`${at}.expected: required for jsonPointerEquals.`);
+        if (!validJsonPointer(check.pointer)) errors.push(`${at}.pointer: must be an RFC 6901 JSON Pointer of at most 4096 characters.`);
+      } else if (typeof check.pointer !== 'undefined') errors.push(`${at}.pointer: is only used with jsonPointerEquals.`);
     }
     if (checkType === 'http') {
       let parsed;

@@ -35,6 +35,14 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
     const config = JSON.parse(await readFile(path.join(root, filename), 'utf8'));
     assertValid(validateConfig, config, filename);
   }
+  const jsonPointerConfig = {
+    version: 1,
+    criteria: [{ id: 'json', description: 'The committed JSON value matches.' }],
+    checks: [{ id: 'json-value', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/a~1b/~0key', expected: { ok: true }, criteria: ['json'] }],
+  };
+  assertValid(validateConfig, jsonPointerConfig, 'JSON Pointer file config');
+  jsonPointerConfig.checks[0].pointer = '/bad~2escape';
+  assert.equal(validateConfig(jsonPointerConfig), false);
   const invalid = { version: 2, criteria: [], checks: [] };
   assert.equal(validateConfig(invalid), false);
 });
