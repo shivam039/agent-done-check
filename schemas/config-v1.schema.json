@@ -203,8 +203,21 @@
           "maximum": 1800000
         },
         "command": {
-          "type": "string",
-          "minLength": 1
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            }
+          ]
         },
         "expectedExitCode": {
           "type": "integer",

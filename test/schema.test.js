@@ -40,7 +40,13 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
     criteria: [{ id: 'json', description: 'The committed JSON value matches.' }],
     checks: [{ id: 'json-value', type: 'file', path: 'data.json', assertion: 'jsonPointerEquals', pointer: '/a~1b/~0key', expected: { ok: true }, criteria: ['json'] }],
   };
-  const httpConfig = JSON.parse(await readFile(path.join(root, 'agent-done-check.http.example.json'), 'utf8'));
+  const argvConfig = { version: 1, criteria: [{ id: 'argv', description: 'An executable receives exact arguments.' }], checks: [{ id: 'argv', command: ['node', '-e', 'process.exit(0)', 'a b'], criteria: ['argv'] }] };
+  assertValid(validateConfig, argvConfig, 'argv command config');
+  argvConfig.checks[0].command = [];
+  assert.equal(validateConfig(argvConfig), false);
+  argvConfig.checks[0].command = ['node', 'x'.repeat(4097)];
+  assert.equal(validateConfig(argvConfig), false);
+    const httpConfig = JSON.parse(await readFile(path.join(root, 'agent-done-check.http.example.json'), 'utf8'));
   assertValid(validateConfig, httpConfig, 'HTTP body limit config');
   httpConfig.checks[0].expectedStatuses = [200, 204];
   delete httpConfig.checks[0].expectedStatus;

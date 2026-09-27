@@ -642,7 +642,16 @@ function validate(config) {
     else checkIds.add(check.id);
     const checkType = check.type ?? 'command';
     if (!['command', 'playwright', 'file', 'http'].includes(checkType)) errors.push(`${at}.type: expected "command", "playwright", "file", or "http".`);
-    if (checkType === 'command' && (typeof check.command !== 'string' || !check.command.trim())) errors.push(`${at}.command: must be a non-empty string.`);
+    if (checkType !== 'command' && typeof check.command !== 'undefined') errors.push(`${at}.command: is supported only for command checks.`);
+    if (checkType === 'command') {
+      if (typeof check.command === 'string') {
+        if (!check.command.trim()) errors.push(`${at}.command: must be a non-empty string.`);
+      } else if (Array.isArray(check.command)) {
+        if (check.command.length < 1 || check.command.length > 256 || typeof check.command[0] !== 'string' || !check.command[0].trim()) errors.push(`${at}.command: argv must contain a non-empty executable and no more than 255 arguments.`);
+        if (check.command.some((arg) => typeof arg !== 'string' || arg.includes('\0') || characterCount(arg) > 4096)) errors.push(`${at}.command: every argv item must be a string of at most 4096 characters without NUL.`);
+        if (check.command.every((arg) => typeof arg === 'string') && check.command.reduce((total, arg) => total + characterCount(arg), 0) > 65_536) errors.push(`${at}.command: argv must be no more than 65536 characters in total.`);
+      } else errors.push(`${at}.command: must be a non-empty shell command string or argv array.`);
+    }
     if (typeof check.expectedExitCode !== 'undefined') {
       if (checkType !== 'command') errors.push(`${at}.expectedExitCode: is supported only for command checks.`);
       if (!Number.isInteger(check.expectedExitCode) || check.expectedExitCode < 0 || check.expectedExitCode > 255) errors.push(`${at}.expectedExitCode: must be an integer from 0 to 255.`);
@@ -996,7 +1005,8 @@ export async function main(argv = process.argv.slice(2)) {
             };
           }
         } else {
-          const [shell, shellArgs] = shellFor(check.command);
+          const argv = Array.isArray(check.command) ? check.command : null;
+          const [executable, executableArgs] = argv ? [argv[0], argv.slice(1)] : shellFor(check.command);
           let commandCwd = worktree;
           if (check.workingDirectory) {
             const requestedDirectory = path.resolve(worktree, check.workingDirectory);
@@ -1011,7 +1021,7 @@ export async function main(argv = process.argv.slice(2)) {
               result = { code: null, signal: null, stdout: '', stderr: '', stdoutTruncated: false, stderrTruncated: false, status: 'unverified', error: 'Configured working directory is missing, is not a directory, or resolves outside the isolated worktree.' };
             }
           }
-          if (!result) result = await run(shell, shellArgs, {
+          if (!result) result = await run(executable, executableArgs, {
             cwd: commandCwd,
             env: verificationEnv(config, commit, check),
             timeoutMs,
@@ -1047,7 +1057,7 @@ export async function main(argv = process.argv.slice(2)) {
           id: check.id,
           type: check.type ?? 'command',
           criteria: check.criteria,
-          command: ['file', 'http'].includes(check.type) ? undefined : redactString(check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, checkRedactions),
+          command: ['file', 'http'].includes(check.type) ? undefined : redactString(Array.isArray(check.command) ? JSON.stringify(check.command) : check.command ?? `Playwright ${check.browser ?? 'chromium'}: ${check.url ? displayUrl(check.url) : ''}`, checkRedactions),
           status: result.status ?? (result.code === 0 ? 'passed' : result.signal === 'TIMEOUT' ? 'unverified' : 'failed'),
           error: result.error,
           exitCode: result.code,
@@ -1066,7 +1076,7 @@ export async function main(argv = process.argv.slice(2)) {
           http: result.http,
         });
       } catch (error) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: redactString(check.command, checkRedactions), status: 'unverified', error: redactString(error.message, checkRedactions), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: redactString(Array.isArray(check.command) ? JSON.stringify(check.command) : check.command, checkRedactions), status: 'unverified', error: redactString(error.message, checkRedactions), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
       } finally {
         await runGit(repository, ['worktree', 'remove', '--force', worktree]);
       }

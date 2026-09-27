@@ -124,6 +124,44 @@ test('command report, evidence files, and manifest hashes agree', async (t) => {
   assert.match(markdown, /&lt;img/);
 });
 
+test('argv command checks preserve literal arguments without invoking a shell', async (t) => {
+  const root = await repository(t);
+  const literal = 'value with spaces; $(touch should-not-run)';
+  const config = baseConfig({
+    command: [process.execPath, '-e', 'process.stdout.write(process.argv[1])', literal],
+    stdoutContains: literal,
+  });
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  git(root, 'add', '.'); git(root, 'commit', '--quiet', '-m', 'argv command fixture');
+  const result = await invokeAsync(root);
+  assert.equal(result.code, 0, result.stderr || JSON.stringify(result.report?.checks));
+  const check = result.report.checks[0];
+  assert.equal(check.status, 'passed');
+  assert.equal(check.command, JSON.stringify([process.execPath, '-e', 'process.stdout.write(process.argv[1])', literal]).replace(literal, '[REDACTED]'));
+  assert.ok(!JSON.stringify(result.report).includes(literal));
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  assert.ok(!markdown.includes(literal));
+
+  const validate = async () => {
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    return invoke(root, ['--validate']);
+  };
+  config.checks[0].command = [];
+  assert.equal((await validate()).code, 2);
+  config.checks[0].command = ['', 'arg'];
+  assert.equal((await validate()).code, 2);
+  config.checks[0].command = [process.execPath, 42];
+  assert.equal((await validate()).code, 2);
+  config.checks[0].command = [process.execPath, 'nul\0arg'];
+  assert.equal((await validate()).code, 2);
+  config.checks[0].command = [process.execPath, 'x'.repeat(4097)];
+  assert.equal((await validate()).code, 2);
+  config.checks[0].command = [process.execPath, ...Array.from({ length: 256 }, () => 'x')];
+  assert.equal((await validate()).code, 2);
+  config.checks[0].command = [process.execPath, ...Array.from({ length: 20 }, () => 'x'.repeat(4096))];
+  assert.equal((await validate()).code, 2);
+});
+
 test('command checks pass only on their configured expected exit code', async (t) => {
   const root = await repository(t);
   const config = {
