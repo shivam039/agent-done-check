@@ -150,7 +150,7 @@ test('file checks report missing files as failed and traversal as invalid config
   git(root, 'commit', '--quiet', '-m', 'invalid traversal config');
   const traversal = await invoke(root);
   assert.equal(traversal.code, 2);
-  assert.match(traversal.stderr, /path: must be a non-empty relative path/);
+  assert.match(traversal.stderr, /path: must be a normalized relative path/);
 
   for (const invalidPath of ['/outside.txt', 'C:\\outside.txt', 'bad\0path']) {
     config.checks[0].path = invalidPath;
@@ -233,7 +233,7 @@ test('file checks reject symlinks resolving outside the verified worktree', asyn
   assert.equal(result.code, 1, JSON.stringify(result.report?.checks));
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   assert.equal(report.checks[0].status, 'unverified');
-  assert.match(report.checks[0].error, /outside the verified worktree/);
+  assert.match(report.checks[0].error, /Symbolic links are not supported/);
   assert.ok(!JSON.stringify(report).includes('outside-secret'));
 });
 

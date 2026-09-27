@@ -6,7 +6,7 @@
 
 ## Summary
 
-Add a narrow `file` check adapter for assertions about text files in the exact commit under verification. The adapter runs against the fresh detached worktree created for that check, does not execute repository commands, rejects paths that resolve outside the worktree, and emits concise hash-based evidence. Update the versioned config/report schemas and explain the adapter's limits.
+Add a narrow `file` check adapter for assertions about files in the exact commit under verification. The adapter reads raw Git blobs from the commit tree used to create its detached worktree, does not execute repository commands, rejects symbolic links and unsafe paths, and emits concise hash-based evidence. Reading raw blobs keeps results stable across checkout filters and operating systems. Update the versioned config/report schemas and explain the adapter's limits.
 
 ## Problem
 
@@ -14,9 +14,9 @@ Agent Done Check currently supports shell commands and Playwright scenarios. Tho
 
 ## Goals
 
-- Support a `type: "file"` check that evaluates one file in the exact detached worktree for the requested commit.
+- Support a `type: "file"` check that evaluates one regular file blob in the exact commit tree for the requested commit.
 - Support four explicit assertions: file exists, exact UTF-8 text equality, UTF-8 substring containment, and SHA-256 equality.
-- Prevent path traversal and symlink resolution outside the verification worktree.
+- Prevent path traversal and reject symbolic links so an assertion always addresses one regular file blob.
 - Bound file size and produce enough evidence to explain the result without copying file contents into the report.
 - Keep the CLI dependency-free at runtime.
 - Publish the adapter in config schema v1 and version the report schema for the new result shape.
@@ -42,9 +42,9 @@ Agent Done Check currently supports shell commands and Playwright scenarios. Tho
 - A file check has `id`, `type: "file"`, `criteria`, relative `path`, and `assertion`.
 - Supported `assertion` values are `exists`, `equals`, `contains`, and `sha256`.
 - `equals` and `contains` require a string `expected`; `sha256` requires a 64-character lowercase hexadecimal digest in `expected`; `exists` does not accept `expected`.
-- Reject absolute paths, empty paths, `..` traversal, NUL bytes, directories, unreadable files, and paths whose resolved target escapes the worktree.
+- Reject absolute paths, empty or non-normalized paths, `..` traversal, NUL bytes, directories, unreadable files, and symbolic links.
 - All existing targets must be regular files no larger than 1 MiB. Text assertions decode UTF-8 strictly. The adapter hashes the bounded bytes for report evidence but never copies their contents into output.
-- The adapter uses the already-created detached worktree for the requested full commit. It must not run `setupCommand`, shell commands, or repository code.
+- The adapter reads the blob object at the normalized relative path in the commit tree used by the already-created detached worktree. It must not run `setupCommand`, shell commands, checkout filters, or repository code.
 
 ### Result and evidence contract
 
@@ -63,7 +63,7 @@ Agent Done Check currently supports shell commands and Playwright scenarios. Tho
 
 ## Risks and limits
 
-This adapter avoids executing project code but is not a sandbox for command or browser checks. A passing file assertion proves only that the requested property held for the file read from the checked-out commit. Symlink and path containment checks are mandatory. SHA-256 is integrity metadata, not a claim that the file is safe or meaningful.
+This adapter avoids executing project code but is not a sandbox for command or browser checks. A passing file assertion proves only that the requested property held for the raw file blob stored in the commit. Symbolic links are rejected. SHA-256 is integrity metadata, not a claim that the file is safe or meaningful.
 
 ## Rollout
 

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, mkdir, writeFile, rm, rename, stat, lstat, realpath, open } from 'node:fs/promises';
+import { mkdtemp, readFile, mkdir, writeFile, rm, rename, stat } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -136,6 +136,13 @@ async function runGit(cwd, args) {
   return run('git', args, { cwd, env });
 }
 
+async function runGitRaw(cwd, args, outputLimit) {
+  const env = { ...process.env };
+  for (const key of GIT_OVERRIDE_KEYS) delete env[key];
+  env.GIT_NO_REPLACE_OBJECTS = '1';
+  return run('git', args, { cwd, env, outputLimit, rawStdout: true });
+}
+
 function signalTree(child, signal) {
   if (process.platform === 'win32') {
     const killed = new Promise((resolve) => {
@@ -186,7 +193,7 @@ function parseArgs(argv) {
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const { timeoutMs, input, ...spawnOptions } = options;
+    const { timeoutMs, input, outputLimit = MAX_OUTPUT, rawStdout = false, ...spawnOptions } = options;
     const detached = process.platform !== 'win32';
     const child = spawn(command, args, { ...spawnOptions, detached, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = Buffer.alloc(0);
@@ -197,14 +204,14 @@ function run(command, args, options = {}) {
     let timer;
     const append = (current, chunk, stream) => {
       const combined = Buffer.concat([current, chunk]);
-      if (combined.byteLength > MAX_OUTPUT) {
+      if (combined.byteLength > outputLimit) {
         if (stream === 'stdout') stdoutTruncated = true;
         else stderrTruncated = true;
       }
-      const firstByte = Math.max(0, combined.byteLength - (MAX_OUTPUT - 4));
+      const firstByte = Math.max(0, combined.byteLength - outputLimit);
       return combined.subarray(firstByte);
     };
-    const snapshot = (code, signal) => ({ code, signal, stdout: stdout.toString('utf8'), stderr: stderr.toString('utf8'), stdoutTruncated, stderrTruncated });
+    const snapshot = (code, signal) => ({ code, signal, stdout: rawStdout ? stdout : stdout.toString('utf8'), stderr: stderr.toString('utf8'), stdoutTruncated, stderrTruncated });
     child.stdout.on('data', (chunk) => { stdout = append(stdout, chunk, 'stdout'); });
     child.stderr.on('data', (chunk) => { stderr = append(stderr, chunk, 'stderr'); });
     child.stdin.on('error', (error) => {
@@ -258,60 +265,34 @@ async function worktreeMutation(cwd, expectedCommit) {
   return null;
 }
 
-function isWithinDirectory(directory, candidate) {
-  const relative = path.relative(directory, candidate);
-  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
-}
-
-async function runFileCheck(worktree, check) {
-  const base = await realpath(worktree);
+async function runFileCheck(repository, commit, check) {
   const parts = check.path.split(/[\\/]/);
-  let current = base;
-  let info;
-  for (const part of parts) {
-    current = path.join(current, part);
-    try { info = await lstat(current); }
-    catch (error) {
-      if (error.code === 'ENOENT') {
-        return { status: check.assertion === 'exists' ? 'failed' : 'failed', error: 'The requested file does not exist.', file: { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } };
-      }
-      return { status: 'unverified', error: 'The requested file could not be inspected.', file: { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } };
-    }
-    const resolved = await realpath(current).catch(() => null);
-    if (!resolved || !isWithinDirectory(base, resolved)) {
-      return { status: 'unverified', error: 'The requested path resolves outside the verified worktree.', file: { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } };
-    }
-    current = resolved;
+  const file = { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false };
+  let prefix = '';
+  let blob;
+  for (const [index, part] of parts.entries()) {
+    prefix = prefix ? `${prefix}/${part}` : part;
+    const listing = await runGitRaw(repository, ['--literal-pathspecs', 'ls-tree', '-z', '--full-tree', commit, '--', prefix], 8192);
+    if (listing.code !== 0) return { status: 'unverified', error: 'The requested file could not be inspected in the verified commit.', file };
+    const records = listing.stdout.toString('utf8').split('\0').filter(Boolean);
+    const record = records.find((item) => item.slice(item.indexOf('\t') + 1) === prefix);
+    if (!record) return { status: 'failed', error: 'The requested file does not exist in the verified commit.', file };
+    const [mode, objectType, oid] = record.slice(0, record.indexOf('\t')).split(' ');
+    file.exists = true;
+    if (mode === '120000') return { status: 'unverified', error: 'Symbolic links are not supported by file checks.', file };
+    if (index < parts.length - 1) {
+      if (objectType !== 'tree' || mode !== '040000') return { status: 'unverified', error: 'A path component is not a regular directory in the verified commit.', file };
+    } else if (objectType !== 'blob' || !['100644', '100755'].includes(mode)) {
+      return { status: 'unverified', error: 'The requested path is not a regular file in the verified commit.', file };
+    } else blob = oid;
   }
-  const file = { path: check.path, assertion: check.assertion, exists: true, bytes: null, sha256: null, matched: false };
-  if (!info?.isFile() && !(await stat(current).then((value) => value.isFile()).catch(() => false))) {
-    return { status: 'unverified', error: 'The requested path is not a regular file.', file };
-  }
-  let fileInfo;
-  try { fileInfo = await stat(current); }
-  catch { return { status: 'unverified', error: 'The requested file could not be inspected.', file }; }
-  if (!fileInfo.isFile()) return { status: 'unverified', error: 'The requested path is not a regular file.', file };
-  file.bytes = fileInfo.size;
-  if (fileInfo.size > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: `The requested file exceeds the ${MAX_FILE_CHECK_BYTES}-byte limit.`, file };
-  let bytes;
-  let handle;
-  try {
-    handle = await open(current, 'r');
-    fileInfo = await handle.stat();
-    if (!fileInfo.isFile()) return { status: 'unverified', error: 'The requested path is not a regular file.', file };
-    file.bytes = fileInfo.size;
-    if (fileInfo.size > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: `The requested file exceeds the ${MAX_FILE_CHECK_BYTES}-byte limit.`, file };
-    const buffer = Buffer.alloc(MAX_FILE_CHECK_BYTES + 1);
-    let offset = 0;
-    while (offset < buffer.byteLength) {
-      const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset);
-      if (bytesRead === 0) break;
-      offset += bytesRead;
-    }
-    if (offset > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: `The requested file exceeds the ${MAX_FILE_CHECK_BYTES}-byte limit.`, file };
-    bytes = buffer.subarray(0, offset);
-  } catch { return { status: 'unverified', error: 'The requested file could not be read.', file }; }
-  finally { await handle?.close().catch(() => {}); }
+  const size = await git(repository, 'cat-file', '-s', blob);
+  file.bytes = Number(size);
+  if (!Number.isSafeInteger(file.bytes) || file.bytes < 0) return { status: 'unverified', error: 'The requested file size could not be read.', file };
+  if (file.bytes > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: `The requested file exceeds the ${MAX_FILE_CHECK_BYTES}-byte limit.`, file };
+  const read = await runGitRaw(repository, ['cat-file', 'blob', blob], MAX_FILE_CHECK_BYTES + 1);
+  if (read.code !== 0 || read.stdoutTruncated || read.stdout.byteLength > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: 'The requested file could not be read within the size limit.', file };
+  const bytes = read.stdout;
   file.bytes = bytes.byteLength;
   file.sha256 = sha256(bytes);
   if (check.assertion === 'exists') file.matched = true;
@@ -374,7 +355,7 @@ function validate(config) {
     if (!['command', 'playwright', 'file'].includes(checkType)) errors.push(`${at}.type: expected "command", "playwright", or "file".`);
     if (checkType === 'command' && (typeof check.command !== 'string' || !check.command.trim())) errors.push(`${at}.command: must be a non-empty string.`);
     if (checkType === 'file') {
-      if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..')) errors.push(`${at}.path: must be a non-empty relative path inside the verified worktree.`);
+      if (typeof check.path !== 'string' || !check.path.trim() || check.path.includes('\0') || path.isAbsolute(check.path) || path.win32.isAbsolute(check.path) || path.win32.parse(check.path).root || check.path.split(/[\\/]/).some((part) => part === '..' || part === '.' || part === '')) errors.push(`${at}.path: must be a normalized relative path inside the verified worktree.`);
       if (!['exists', 'equals', 'contains', 'sha256'].includes(check.assertion)) errors.push(`${at}.assertion: expected exists, equals, contains, or sha256.`);
       if (['equals', 'contains', 'sha256'].includes(check.assertion) && typeof check.expected !== 'string') errors.push(`${at}.expected: must be a string for ${check.assertion}.`);
       if (check.assertion === 'sha256' && typeof check.expected === 'string' && !/^[a-f0-9]{64}$/.test(check.expected)) errors.push(`${at}.expected: sha256 requires a 64-character lowercase hexadecimal digest.`);
@@ -530,7 +511,7 @@ export async function main(argv = process.argv.slice(2)) {
         const timeoutMs = check.timeoutMs ?? config.timeoutMs ?? 120000;
         const deadline = Date.now() + timeoutMs;
         if (check.type === 'file') {
-          result = await runFileCheck(worktree, check);
+          result = await runFileCheck(repository, commit, check);
         } else if ((check.type ?? 'command') === 'playwright') {
           let setupResult = { code: 0, stdout: '', stderr: '' };
           let setupTimeMs = 0;
