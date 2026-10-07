@@ -162,7 +162,7 @@ test('HTTP report schema describes nullable match results while staying backward
     commitHeader: 'x-agent-done-check-commit', revisionBinding: 'verified',
     bodyBytes: 0, bodySha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     bodyTruncated: false, bodyContainsMatched: null,
-    bodyJsonPointerExistsMatched: null,
+    bodyJsonPointerExistsMatched: null, bodyEqualsMatched: null,
   };
   const report = {
     schemaVersion: 4, tool: { name: 'agent-done-check', version: '0.21.0' }, runId: '00000000-0000-4000-8000-000000000000',
@@ -192,11 +192,13 @@ test('HTTP report schema describes nullable match results while staying backward
   report.checks[0].http.bodySha256Matched = true;
   report.checks[0].http.bodyJsonPointerMatched = true;
   report.checks[0].http.bodyJsonPointerExistsMatched = true;
+  report.checks[0].http.bodyEqualsMatched = true;
   assertValid(validateReport, report, 'HTTP report with matching assertions');
   report.checks[0].http.responseHeadersMatched = { 'x-mode': false };
   report.checks[0].http.bodySha256Matched = false;
   report.checks[0].http.bodyJsonPointerMatched = false;
   report.checks[0].http.bodyJsonPointerExistsMatched = false;
+  report.checks[0].http.bodyEqualsMatched = false;
   assertValid(validateReport, report, 'HTTP report with failed assertions');
   report.checks[0].http.responseHeadersMatched = { 'bad name': true };
   assert.equal(validateReport(report), false);

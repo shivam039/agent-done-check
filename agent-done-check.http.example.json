@@ -17,7 +17,9 @@
         "deployment"
       ],
       "maxBodyBytes": 65536,
-      "requiredResponseHeaders": ["content-type"],
+      "requiredResponseHeaders": [
+        "content-type"
+      ],
       "expectedContentType": "application/json",
       "expectedStatuses": [
         200,
@@ -43,6 +45,15 @@
       "bodyJsonPointerExists": {
         "pointer": "/status"
       },
+      "criteria": [
+        "deployment"
+      ]
+    },
+    {
+      "id": "plain-text-health",
+      "type": "http",
+      "url": "https://example.invalid/health.txt",
+      "bodyEquals": "healthy\n",
       "criteria": [
         "deployment"
       ]

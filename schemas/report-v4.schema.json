@@ -555,6 +555,9 @@
             "null"
           ]
         },
+        "bodyEqualsMatched": {
+          "type": ["boolean", "null"]
+        },
         "responseHeadersMatched": {
           "type": [
             "object",
