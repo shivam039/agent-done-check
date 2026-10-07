@@ -694,10 +694,11 @@ function validate(config) {
       if (!Array.isArray(check.expectedExitCodes) || check.expectedExitCodes.length < 1 || check.expectedExitCodes.length > 32 || check.expectedExitCodes.some((code) => !Number.isInteger(code) || code < 0 || code > 255)) errors.push(`${at}.expectedExitCodes: must contain 1 to 32 integers from 0 to 255.`);
       else if (new Set(check.expectedExitCodes).size !== check.expectedExitCodes.length) errors.push(`${at}.expectedExitCodes: codes must be unique.`);
     }
-    for (const field of ['stdoutContains', 'stderrContains']) {
+    for (const field of ['stdoutContains', 'stderrContains', 'stdoutEquals', 'stderrEquals']) {
       if (typeof check[field] === 'undefined') continue;
       if (checkType !== 'command') errors.push(`${at}.${field}: is supported only for command checks.`);
-      if (typeof check[field] !== 'string' || !check[field].length || characterCount(check[field]) > 4096) errors.push(`${at}.${field}: must be a non-empty string of at most 4096 characters.`);
+      const exact = field.endsWith('Equals');
+      if (typeof check[field] !== 'string' || (!exact && !check[field].length) || characterCount(check[field]) > (exact ? 65_536 : 4096)) errors.push(`${at}.${field}: must be a ${exact ? 'string of at most 65536 characters' : 'non-empty string of at most 4096 characters'}.`);
     }
     if (typeof check.workingDirectory !== 'undefined') {
       if (checkType !== 'command') errors.push(`${at}.workingDirectory: is supported only for command checks.`);
@@ -899,6 +900,12 @@ function markdownReport(report, evidenceFiles, manifestPath) {
         if (matched === true) lines.push('', `${stream} substring assertion: matched.`);
         else if (matched === false && check.outputTruncated?.[stream]) lines.push('', `${stream} substring assertion: not found in the captured, truncated output; result is unverified.`);
         else if (matched === false) lines.push('', `${stream} substring assertion: did not match.`);
+        const exactField = `${stream}EqualsMatched`;
+        const exactMatched = check.outputAssertions[exactField];
+        if (!Object.prototype.hasOwnProperty.call(check.outputAssertions, exactField)) continue;
+        if (exactMatched === true) lines.push('', `${stream} exact output assertion: matched.`);
+        else if (exactMatched === false) lines.push('', `${stream} exact output assertion: did not match.`);
+        else if (exactMatched === null && check.outputTruncated?.[stream]) lines.push('', `${stream} exact output assertion: could not be evaluated because captured output was truncated.`);
       }
     }
     if (check.http) {
@@ -1018,7 +1025,9 @@ export async function main(argv = process.argv.slice(2)) {
         ...secretsToRedact,
         check.stdoutContains,
         check.stderrContains,
-      ].filter((value) => typeof value === 'string'))].sort((a, b) => b.length - a.length);
+        check.stdoutEquals,
+        check.stderrEquals,
+      ].filter((value) => typeof value === 'string' && value.length > 0))].sort((a, b) => b.length - a.length);
       const add = await runGit(repository, ['worktree', 'add', '--detach', '--quiet', worktree, commit]);
       if (add.code !== 0) {
         results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, status: 'unverified', error: add.stderr.trim() || 'Unable to create isolated verification worktree.', file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false, maxFileBytes: check.maxFileBytes ?? MAX_FILE_CHECK_BYTES } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
@@ -1099,17 +1108,33 @@ export async function main(argv = process.argv.slice(2)) {
           if (result.status === 'unverified' && result.error) {
             result.expectedExitCodes = check.expectedExitCodes ?? [check.expectedExitCode ?? 0];
             result.expectedExitCode = result.expectedExitCodes[0];
-            result.outputAssertions = { stdoutContainsMatched: null, stderrContainsMatched: null };
+            result.outputAssertions = {
+              stdoutContainsMatched: null,
+              stderrContainsMatched: null,
+              ...(typeof check.stdoutEquals === 'string' ? { stdoutEqualsMatched: null } : {}),
+              ...(typeof check.stderrEquals === 'string' ? { stderrEqualsMatched: null } : {}),
+            };
           } else {
           result.expectedExitCodes = check.expectedExitCodes ?? [check.expectedExitCode ?? 0];
           result.expectedExitCode = result.expectedExitCodes[0];
           const stdoutContainsMatched = typeof check.stdoutContains === 'string' ? result.stdout.includes(check.stdoutContains) : null;
           const stderrContainsMatched = typeof check.stderrContains === 'string' ? result.stderr.includes(check.stderrContains) : null;
-          result.outputAssertions = { stdoutContainsMatched, stderrContainsMatched };
+          const stdoutEqualsMatched = typeof check.stdoutEquals === 'string' && !result.stdoutTruncated ? result.stdout === check.stdoutEquals : null;
+          const stderrEqualsMatched = typeof check.stderrEquals === 'string' && !result.stderrTruncated ? result.stderr === check.stderrEquals : null;
+          result.outputAssertions = {
+            stdoutContainsMatched,
+            stderrContainsMatched,
+            ...(typeof check.stdoutEquals === 'string' ? { stdoutEqualsMatched } : {}),
+            ...(typeof check.stderrEquals === 'string' ? { stderrEqualsMatched } : {}),
+          };
           const assertionFailed = (stdoutContainsMatched === false && !result.stdoutTruncated)
-            || (stderrContainsMatched === false && !result.stderrTruncated);
+            || (stderrContainsMatched === false && !result.stderrTruncated)
+            || stdoutEqualsMatched === false
+            || stderrEqualsMatched === false;
           const assertionUnverified = (stdoutContainsMatched === false && result.stdoutTruncated)
-            || (stderrContainsMatched === false && result.stderrTruncated);
+            || (stderrContainsMatched === false && result.stderrTruncated)
+            || (typeof check.stdoutEquals === 'string' && result.stdoutTruncated)
+            || (typeof check.stderrEquals === 'string' && result.stderrTruncated);
           result.status = result.signal === 'TIMEOUT' ? 'unverified'
             : !result.expectedExitCodes.includes(result.code) || assertionFailed ? 'failed'
               : assertionUnverified ? 'unverified' : 'passed';

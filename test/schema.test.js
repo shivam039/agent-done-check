@@ -172,6 +172,11 @@ test('HTTP report schema describes nullable match results while staying backward
     criteria: [], checks: [{ id: 'http-check', type: 'http', criteria: [], status: 'passed', startedAt: '2026-09-27T00:00:00.000Z', http: originalHttp }],
   };
   assertValid(validateReport, report, 'older v4 HTTP report');
+  report.checks[0].outputAssertions = { stdoutEqualsMatched: null, stderrEqualsMatched: true };
+  assertValid(validateReport, report, 'v4 report with exact command output assertion evidence');
+  report.checks[0].outputAssertions = { stdoutEqualsMatched: false, stderrEqualsMatched: false };
+  assertValid(validateReport, report, 'v4 report with failed exact output assertions');
+  delete report.checks[0].outputAssertions;
   report.checks[0].http.responseHeadersMatched = null;
   report.checks[0].http.responseHeadersPresent = null;
   report.checks[0].http.contentTypeMatched = null;

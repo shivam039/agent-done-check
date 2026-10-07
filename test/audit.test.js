@@ -401,6 +401,57 @@ test('command output substring assertions report pass, fail, and truncated uncer
   assert.match(tooLongAssertion.stdout, /stdoutContains/);
 });
 
+test('command exact output assertions require complete streams and redact expected values', async (t) => {
+  const root = await repository(t);
+  const privateExpected = 'SENSITIVE-EXPECTED-OUTPUT';
+  const config = {
+    version: 1,
+    criteria: [{ id: 'exact-output', description: 'Command output matches its complete expected text.' }],
+    checks: [
+      { id: 'stdout-match', command: nodeCommand(`process.stdout.write(${JSON.stringify(privateExpected)})`), stdoutEquals: privateExpected, criteria: ['exact-output'] },
+      { id: 'stderr-match', command: nodeCommand('process.stderr.write("stderr-exact\\n")'), stderrEquals: 'stderr-exact\n', criteria: ['exact-output'] },
+      { id: 'empty-output', command: nodeCommand(''), stdoutEquals: '', criteria: ['exact-output'] },
+      { id: 'mismatch', command: nodeCommand('process.stdout.write("actual")'), stdoutEquals: 'expected', criteria: ['exact-output'] },
+      { id: 'truncated-suffix', command: nodeCommand('process.stdout.write("x".repeat(1500) + "tail")'), stdoutEquals: 'tail', maxOutputBytes: 1024, criteria: ['exact-output'] },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  const result = await invoke(root);
+  assert.equal(result.code, 1);
+  const report = result.report;
+  const checks = Object.fromEntries(report.checks.map((check) => [check.id, check]));
+  assert.equal(checks['stdout-match'].status, 'passed');
+  assert.equal(checks['stdout-match'].outputAssertions.stdoutEqualsMatched, true);
+  assert.equal(checks['stderr-match'].status, 'passed');
+  assert.equal(checks['stderr-match'].outputAssertions.stderrEqualsMatched, true);
+  assert.equal(checks['empty-output'].status, 'passed');
+  assert.equal(checks['empty-output'].outputAssertions.stdoutEqualsMatched, true);
+  assert.equal(checks.mismatch.status, 'failed');
+  assert.equal(checks.mismatch.outputAssertions.stdoutEqualsMatched, false);
+  assert.equal(checks['truncated-suffix'].status, 'unverified');
+  assert.equal(checks['truncated-suffix'].outputAssertions.stdoutEqualsMatched, null);
+  assert.equal(checks['truncated-suffix'].outputTruncated.stdout, true);
+  assert.doesNotMatch(JSON.stringify(report), /SENSITIVE-EXPECTED-OUTPUT|stderr-exact|tail/);
+  const stdoutEvidence = await readFile(path.join(root, '.agent-done-check/evidence', report.runId, 'stdout-match.stdout.txt'), 'utf8');
+  assert.doesNotMatch(stdoutEvidence, /SENSITIVE-EXPECTED-OUTPUT/);
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  assert.match(markdown, /stdout exact output assertion: matched/);
+  assert.match(markdown, /stdout exact output assertion: could not be evaluated because captured output was truncated/);
+  assert.doesNotMatch(markdown, /SENSITIVE-EXPECTED-OUTPUT|stderr-exact|tail/);
+
+  const validate = async () => {
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    return invoke(root, ['--validate']);
+  };
+  config.checks[0].stdoutEquals = 'x'.repeat(65_537);
+  assert.equal((await validate()).code, 2);
+  config.checks[0].stdoutEquals = 42;
+  assert.equal((await validate()).code, 2);
+  config.checks[0].stdoutEquals = '';
+  config.checks[0].type = 'file'; config.checks[0].path = 'agent-done-check.json'; config.checks[0].assertion = 'exists';
+  assert.equal((await validate()).code, 2);
+});
+
 test('command working directories stay inside the isolated worktree', async (t) => {
   const root = await repository(t);
   const outside = await mkdtemp(path.join(tmpdir(), 'agent-done-check-outside-'));
