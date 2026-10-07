@@ -25,7 +25,8 @@
         { "action": "click", "selector": "button[type=submit]" },
         { "action": "expectUrl", "value": "/dashboard" },
         { "action": "expectVisible", "selector": "h1" },
-        { "action": "expectText", "selector": "h1", "value": "Dashboard" }
+        { "action": "expectText", "selector": "h1", "value": "Dashboard" },
+        { "action": "expectAttribute", "selector": "[role=status]", "attribute": "aria-label", "value": "Ready" }
       ],
       "failOnConsoleError": false,
       "failOnPageError": true,

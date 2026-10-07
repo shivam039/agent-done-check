@@ -42,6 +42,24 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
   };
   const argvConfig = { version: 1, criteria: [{ id: 'argv', description: 'An executable receives exact arguments.' }], checks: [{ id: 'argv', command: ['node', '-e', 'process.exit(0)', 'a b'], criteria: ['argv'] }] };
   assertValid(validateConfig, argvConfig, 'argv command config');
+  const attributeConfig = {
+    version: 1,
+    criteria: [{ id: 'browser', description: 'The page exposes the expected state.' }],
+    checks: [{ id: 'attribute', type: 'playwright', url: 'https://example.invalid/', steps: [{ action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'Ready', exact: true }], criteria: ['browser'] }],
+  };
+  assertValid(validateConfig, attributeConfig, 'Playwright attribute assertion');
+  delete attributeConfig.checks[0].steps[0].attribute;
+  assert.equal(validateConfig(attributeConfig), false);
+  attributeConfig.checks[0].steps[0].attribute = 'x'.repeat(257);
+  assert.equal(validateConfig(attributeConfig), false);
+  attributeConfig.checks[0].steps[0].attribute = 'aria-label';
+  delete attributeConfig.checks[0].steps[0].value;
+  assert.equal(validateConfig(attributeConfig), false);
+  attributeConfig.checks[0].steps[0].value = 'Ready';
+  attributeConfig.checks[0].steps[0].attribute = ' ';
+  assertValid(validateConfig, attributeConfig, 'schema allows a whitespace attribute name');
+  attributeConfig.checks[0].steps[0] = { action: 'expectVisible', selector: '[role=status]', attribute: 'aria-label' };
+  assertValid(validateConfig, attributeConfig, 'schema permits extension properties');
   argvConfig.checks[0].expectedExitCodes = [0, 7];
   assertValid(validateConfig, argvConfig, 'multiple expected command exit codes');
   argvConfig.checks[0].expectedExitCode = 0;

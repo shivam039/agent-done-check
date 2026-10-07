@@ -2,6 +2,10 @@
 
 This project is pre-1.0. Releases are experimental and may include breaking changes; see [compatibility and migration policy](./docs/compatibility.md).
 
+## 0.36.0 — 2026-10-07
+
+- Add Playwright DOM attribute assertions with substring and exact matching.
+
 ## 0.35.0 — 2026-10-07
 
 - Add exact text assertions for bounded, commit-bound HTTP response bodies.

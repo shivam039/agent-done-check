@@ -61,6 +61,17 @@ async function waitForValue(locator, expected, timeoutMs) {
   throw new Error(`Expected value ${JSON.stringify(expected)}; last value was ${JSON.stringify(lastValue)}.`);
 }
 
+async function waitForAttribute(locator, attribute, expected, timeoutMs, exact = false) {
+  const end = Date.now() + timeoutMs;
+  let lastValue = null;
+  while (Date.now() < end) {
+    lastValue = await locator.getAttribute(attribute).catch(() => null);
+    if (lastValue !== null && (exact ? lastValue === expected : lastValue.includes(expected))) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Expected attribute ${JSON.stringify(attribute)} ${exact ? 'to equal' : 'to contain'} ${JSON.stringify(expected)}; last value was ${JSON.stringify(lastValue)}.`);
+}
+
 async function performStep(page, step, timeoutMs) {
   if (step.action === 'expectUrl') {
     await page.waitForURL((url) => step.exact ? url.href === step.value : url.href.includes(step.value), { timeout: timeoutMs });
@@ -77,6 +88,7 @@ async function performStep(page, step, timeoutMs) {
   else if (step.action === 'expectHidden') await locator.waitFor({ state: 'hidden', timeout: timeoutMs });
   else if (step.action === 'expectText') await waitForText(locator, step.value, timeoutMs, step.exact === true);
   else if (step.action === 'expectValue') await waitForValue(locator, step.value, timeoutMs);
+  else if (step.action === 'expectAttribute') await waitForAttribute(locator, step.attribute, step.value, timeoutMs, step.exact === true);
 }
 
 async function main() {
