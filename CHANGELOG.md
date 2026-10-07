@@ -2,6 +2,10 @@
 
 This project is pre-1.0. Releases are experimental and may include breaking changes; see [compatibility and migration policy](./docs/compatibility.md).
 
+## 0.34.0 — 2026-10-07
+
+- Add exact stdout and stderr assertions for command checks.
+
 ## 0.33.0 — 2026-10-07
 
 - Add a configurable per-check maximum size for committed file assertions.

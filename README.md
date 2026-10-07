@@ -134,7 +134,7 @@ Command checks pass on exit code 0 by default. Set `expectedExitCode` on a comma
 
 ### Command output assertions
 
-Command checks may set `stdoutContains` or `stderrContains` to a non-empty substring of at most 4096 characters. The report records only whether each assertion matched. Matching is evaluated before redaction, and configured substrings are redacted from captured stdout/stderr in JSON and evidence files. If a substring is absent from complete captured output the check fails. If it is absent from truncated output, the check is unverified because the missing prefix was not observed.
+Command checks may set `stdoutContains` or `stderrContains` to a non-empty substring of at most 4096 characters. The report records only whether each assertion matched. Matching is evaluated before redaction, and configured substrings are redacted from captured stdout/stderr in JSON and evidence files. If a substring is absent from complete captured output the check fails. If it is absent from truncated output, the check is unverified because the missing prefix was not observed. Set `stdoutEquals` or `stderrEquals` to assert the complete stream text (up to 65,536 characters; an empty string is allowed). Exact assertions are evaluated only when that stream was not truncated; truncation makes the result unverified. Reports record nullable match booleans, never expected values. Configured exact values are redacted from captured output and evidence files.
 
 ### Command working directory
 

@@ -237,6 +237,16 @@
           },
           "additionalProperties": true
         },
+        "outputAssertions": {
+          "type": "object",
+          "properties": {
+            "stdoutContainsMatched": { "type": ["boolean", "null"] },
+            "stderrContainsMatched": { "type": ["boolean", "null"] },
+            "stdoutEqualsMatched": { "type": ["boolean", "null"] },
+            "stderrEqualsMatched": { "type": ["boolean", "null"] }
+          },
+          "additionalProperties": true
+        },
         "browser": {
           "$ref": "#/$defs/browserResult"
         },

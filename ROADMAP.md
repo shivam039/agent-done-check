@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.34.0 — Exact command output assertions
+
+PRD: [`docs/PRD-0.34.0-command-exact-output.md`](./docs/PRD-0.34.0-command-exact-output.md)
+
+- Verify complete stdout or stderr text with explicit truncated-output semantics.
+
 ## Completed: 0.33.0 — Per-check file byte limit
 
 PRD: [`docs/PRD-0.33.0-per-check-file-byte-limit.md`](./docs/PRD-0.33.0-per-check-file-byte-limit.md)

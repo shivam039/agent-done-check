@@ -234,6 +234,14 @@
           "minLength": 1,
           "maxLength": 4096
         },
+        "stdoutEquals": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "stderrEquals": {
+          "type": "string",
+          "maxLength": 65536
+        },
         "workingDirectory": {
           "type": "string",
           "minLength": 1
