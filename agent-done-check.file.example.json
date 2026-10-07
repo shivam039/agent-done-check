@@ -17,6 +17,7 @@
       "path": "config/application.txt",
       "assertion": "contains",
       "expected": "feature_enabled=true",
+      "maxFileBytes": 65536,
       "criteria": [
         "settings"
       ]

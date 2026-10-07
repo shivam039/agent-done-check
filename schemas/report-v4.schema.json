@@ -443,7 +443,9 @@
             "exists",
             "equals",
             "contains",
-            "sha256"
+            "sha256",
+            "jsonPointerEquals",
+            "jsonPointerExists"
           ]
         },
         "exists": {
@@ -455,6 +457,11 @@
             "null"
           ],
           "minimum": 0
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
         },
         "sha256": {
           "anyOf": [
