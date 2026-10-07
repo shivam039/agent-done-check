@@ -99,6 +99,7 @@
             "expectHidden",
             "expectText",
             "expectValue",
+            "expectAttribute",
             "expectUrl"
           ]
         },
@@ -109,11 +110,31 @@
         "value": {
           "type": "string"
         },
+        "attribute": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
         "exact": {
           "type": "boolean"
         }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": { "const": "expectAttribute" }
+            },
+            "required": ["action"]
+          },
+          "then": {
+            "properties": {
+              "attribute": {},
+              "value": {}
+            },
+            "required": ["attribute", "value"]
+          }
+        },
         {
           "if": {
             "properties": {
@@ -151,7 +172,8 @@
                   "selectOption",
                   "press",
                   "expectText",
-                  "expectValue"
+                  "expectValue",
+                  "expectAttribute"
                 ]
               }
             },

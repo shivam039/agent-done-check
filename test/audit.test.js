@@ -851,7 +851,7 @@ module.exports = {
               handlers.console({ type: () => 'error', location: () => ({ url }), text: () => 'failed to submit replace-with-test-credential' });
             },
             waitForURL: async () => {},
-            locator: () => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async () => process.env.AGENT_DONE_CHECK_TARGET_COMMIT }),
+            locator: () => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -868,6 +868,8 @@ module.exports = {
     steps: [
       { action: 'fill', selector: '[name=password]', value: 'replace-with-test-credential' },
       { action: 'expectUrl', value: '/dashboard' },
+      { action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'Ready', exact: true },
+      { action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'ead' },
     ],
     failOnHttpError: false,
   });
@@ -901,11 +903,35 @@ module.exports = {
   assert.equal(check.browser.url, 'https://staging.example.test/dashboard');
   assert.ok(!JSON.stringify(report).includes('do-not-report'));
   assert.ok(!JSON.stringify(report).includes('password'));
+  assert.ok(!JSON.stringify(report).includes('Ready'));
+  assert.ok(!JSON.stringify(report).includes('ead'));
   assert.equal(check.browser.artifacts[0].role, 'browser-screenshot');
   assert.ok(manifest.artifacts.some((artifact) => artifact.role === 'browser-screenshot' && artifact.sha256));
   assert.equal(report.checks[1].status, 'unverified');
   assert.equal(report.checks[1].browser.revisionBinding.status, 'unverified');
   assert.match(await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8'), /browser-screenshot/);
+});
+
+test('browser attribute assertion config validation rejects missing and malformed fields', async (t) => {
+  const root = await repository(t);
+  const check = { id: 'attribute', type: 'playwright', url: 'https://example.invalid/', steps: [{ action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'Ready' }] };
+  const config = baseConfig(check);
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  let result = await invoke(root, ['--validate']);
+  assert.equal(result.code, 0, result.stderr);
+
+  for (const mutate of [
+    (step) => { delete step.attribute; },
+    (step) => { step.attribute = '   '; },
+    (step) => { step.attribute = 'x'.repeat(257); },
+    (step) => { step.action = 'expectVisible'; step.attribute = 'aria-label'; delete step.value; },
+  ]) {
+    const invalid = structuredClone(config);
+    mutate(invalid.checks[0].steps[0]);
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(invalid));
+    result = await invoke(root, ['--validate']);
+    assert.equal(result.code, 2, result.stderr || result.stdout);
+  }
 });
 
 test('timeout terminates descendant processes and marks the criterion unverified', async (t) => {

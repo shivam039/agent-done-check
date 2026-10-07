@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.36.0 — Playwright attribute assertions
+
+PRD: [`docs/PRD-0.36.0-playwright-attribute-assertion.md`](./docs/PRD-0.36.0-playwright-attribute-assertion.md)
+
+- Assert a DOM attribute contains or exactly equals a value in a commit-bound browser check.
+
 ## Completed: 0.35.0 — Exact HTTP body text assertions
 
 PRD: [`docs/PRD-0.35.0-http-exact-body-text.md`](./docs/PRD-0.35.0-http-exact-body-text.md)
