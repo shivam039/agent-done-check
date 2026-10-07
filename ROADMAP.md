@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.32.0 — HTTP JSON Pointer existence assertions
+
+PRD: [`docs/PRD-0.32.0-http-json-pointer-exists.md`](./docs/PRD-0.32.0-http-json-pointer-exists.md)
+
+- Assert that an RFC 6901 pointer resolves in a commit-bound HTTP JSON body, without knowing or recording its value.
+
 ## Completed: 0.4.0 — Safer adoption
 
 Implemented:

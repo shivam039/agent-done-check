@@ -417,6 +417,18 @@
           },
           "additionalProperties": false
         },
+        "bodyJsonPointerExists": {
+          "type": "object",
+          "required": ["pointer"],
+          "properties": {
+            "pointer": {
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+            }
+          },
+          "additionalProperties": false
+        },
         "expectedStatuses": {
           "type": "array",
           "minItems": 1,

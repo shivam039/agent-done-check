@@ -1086,6 +1086,7 @@ test('HTTP JSON Pointer assertions are typed, commit-bound, bounded, and private
   const port = server.address().port;
   const expectedObject = JSON.parse(`{"name":${JSON.stringify(expectedSecret)},"items":[null,false]}`);
   const base = (id, route, assertion) => ({ id, type: 'http', url: `http://127.0.0.1:${port}${route}`, bodyJsonPointerEquals: assertion, criteria: ['json-http'] });
+  const exists = (id, route, pointer) => ({ id, type: 'http', url: `http://127.0.0.1:${port}${route}`, bodyJsonPointerExists: { pointer }, criteria: ['json-http'] });
   const config = {
     version: 1,
     criteria: [{ id: 'json-http', description: 'The response JSON contains the expected value.' }],
@@ -1099,6 +1100,13 @@ test('HTTP JSON Pointer assertions are typed, commit-bound, bounded, and private
       base('invalid-utf8', '/invalid-utf8', { pointer: '', expected: {} }),
       base('unbound', '/unbound', { pointer: '', expected: {} }),
       { ...base('too-large', '/too-large', { pointer: '', expected: {} }), maxBodyBytes: 8 },
+      exists('exists-null', '/exists-null', '/a~1b/~0key/items/0'),
+      exists('exists-false', '/exists-false', '/a~1b/~0key/items/1'),
+      exists('exists-missing', '/exists-missing', '/missing'),
+      exists('exists-root', '/exists-root', ''),
+      exists('exists-unbound', '/unbound', ''),
+      exists('exists-malformed', '/malformed', ''),
+      { ...exists('exists-too-large', '/too-large', ''), maxBodyBytes: 8 },
     ],
   };
   await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
@@ -1110,6 +1118,13 @@ test('HTTP JSON Pointer assertions are typed, commit-bound, bounded, and private
   for (const id of ['match', 'null', 'prototype-key']) assert.equal(checks[id].status, 'passed', id);
   for (const id of ['wrong-type', 'missing', 'malformed']) assert.equal(checks[id].status, 'failed', id);
   for (const id of ['invalid-utf8', 'unbound', 'too-large']) assert.equal(checks[id].status, 'unverified', id);
+  for (const id of ['exists-null', 'exists-false', 'exists-root']) assert.equal(checks[id].status, 'passed', id);
+  assert.equal(checks['exists-missing'].status, 'failed');
+  assert.equal(checks['exists-malformed'].status, 'failed');
+  assert.equal(checks['exists-unbound'].status, 'unverified');
+  assert.equal(checks['exists-too-large'].status, 'unverified');
+  assert.equal(checks['exists-false'].http.bodyJsonPointerExistsMatched, true);
+  assert.equal(checks['exists-unbound'].http.bodyJsonPointerExistsMatched, null);
   assert.equal(checks.match.http.bodyJsonPointerMatched, true);
   assert.equal(checks['wrong-type'].http.bodyJsonPointerMatched, false);
   assert.equal(checks.unbound.http.bodyJsonPointerMatched, null);
@@ -1124,6 +1139,12 @@ test('HTTP JSON Pointer assertions are typed, commit-bound, bounded, and private
   await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
   assert.equal((await invoke(root, ['--validate'])).code, 2);
   config.checks[0].bodyJsonPointerEquals = { pointer: '', extra: 1 };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  assert.equal((await invoke(root, ['--validate'])).code, 2);
+  config.checks[0].bodyJsonPointerExists = { pointer: '/bad~2' };
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+  assert.equal((await invoke(root, ['--validate'])).code, 2);
+  config.checks[0].bodyJsonPointerExists = { pointer: '', expected: true };
   await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
   assert.equal((await invoke(root, ['--validate'])).code, 2);
 });

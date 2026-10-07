@@ -2,6 +2,10 @@
 
 This project is pre-1.0. Releases are experimental and may include breaking changes; see [compatibility and migration policy](./docs/compatibility.md).
 
+## 0.32.0 — 2026-10-07
+
+- Add commit-bound HTTP JSON Pointer existence assertions.
+
 ## 0.31.0 — 2026-09-27
 
 - Add commit-bound normalized HTTP response content type evidence.

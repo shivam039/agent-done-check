@@ -567,6 +567,12 @@
             "null"
           ]
         },
+        "bodyJsonPointerExistsMatched": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "expectedStatuses": {
           "type": "array",
           "minItems": 1,
