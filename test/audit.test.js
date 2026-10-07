@@ -579,8 +579,41 @@ test('file checks verify exact committed bytes with bounded redacted evidence', 
     assert.equal(check.file.sha256, digest);
     assert.equal(check.file.bytes, Buffer.byteLength(content));
     assert.equal(check.file.matched, true);
+    assert.equal(check.file.maxFileBytes, 1_048_576);
   }
   assert.ok(!JSON.stringify(report).includes(content));
+});
+
+test('file checks enforce a configured byte cap before reading the Git blob', async (t) => {
+  const root = await repository(t);
+  const content = 'x'.repeat(64);
+  const config = baseConfig({ type: 'file', path: 'metadata.json', assertion: 'exists', maxFileBytes: 32 });
+  config.checks.push({ ...config.checks[0], id: 'boundary', maxFileBytes: 64 });
+  config.checks.push({ ...config.checks[0], id: 'minimum-cap', path: 'one-byte.txt', maxFileBytes: 1 });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config), 'metadata.json': content, 'one-byte.txt': 'x' });
+  const result = await invoke(root);
+  assert.equal(result.code, 1);
+  const check = result.report.checks[0];
+  assert.equal(check.status, 'unverified');
+  assert.equal(check.file.bytes, Buffer.byteLength(content));
+  assert.equal(check.file.maxFileBytes, 32);
+  assert.equal(check.file.sha256, null);
+  assert.equal(check.file.matched, false);
+  assert.equal(result.report.checks[1].status, 'passed');
+  assert.equal(result.report.checks[1].file.maxFileBytes, 64);
+  assert.equal(result.report.checks[2].status, 'passed');
+  assert.equal(result.report.checks[2].file.maxFileBytes, 1);
+
+  const validate = async () => {
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    return invoke(root, ['--validate']);
+  };
+  for (const maxFileBytes of [0, 1_048_577, 1.5, '32']) {
+    config.checks[0].maxFileBytes = maxFileBytes;
+    assert.equal((await validate()).code, 2, JSON.stringify(maxFileBytes));
+  }
+  config.checks[0].type = 'command'; config.checks[0].command = 'node --version'; config.checks[0].maxFileBytes = 32;
+  assert.equal((await validate()).code, 2);
 });
 
 test('file checks report missing files as failed and traversal as invalid config', async (t) => {

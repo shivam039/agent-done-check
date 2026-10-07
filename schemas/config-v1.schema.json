@@ -243,6 +243,11 @@
           "minimum": 1024,
           "maximum": 1048576
         },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
         "stdin": {
           "type": "string",
           "maxLength": 65536

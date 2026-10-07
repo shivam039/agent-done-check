@@ -426,7 +426,8 @@ function jsonValuesEqual(left, right) {
 
 async function runFileCheck(repository, commit, check) {
   const parts = check.path.split(/[\\/]/);
-  const file = { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false };
+  const maxFileBytes = check.maxFileBytes ?? MAX_FILE_CHECK_BYTES;
+  const file = { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false, maxFileBytes };
   let prefix = '';
   let blob;
   for (const [index, part] of parts.entries()) {
@@ -448,9 +449,9 @@ async function runFileCheck(repository, commit, check) {
   const size = await git(repository, 'cat-file', '-s', blob);
   file.bytes = Number(size);
   if (!Number.isSafeInteger(file.bytes) || file.bytes < 0) return { status: 'unverified', error: 'The requested file size could not be read.', file };
-  if (file.bytes > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: `The requested file exceeds the ${MAX_FILE_CHECK_BYTES}-byte limit.`, file };
-  const read = await runGitRaw(repository, ['cat-file', 'blob', blob], MAX_FILE_CHECK_BYTES + 1);
-  if (read.code !== 0 || read.stdoutTruncated || read.stdout.byteLength > MAX_FILE_CHECK_BYTES) return { status: 'unverified', error: 'The requested file could not be read within the size limit.', file };
+  if (file.bytes > maxFileBytes) return { status: 'unverified', error: `The requested file exceeds the ${maxFileBytes}-byte limit.`, file };
+  const read = await runGitRaw(repository, ['cat-file', 'blob', blob], maxFileBytes + 1);
+  if (read.code !== 0 || read.stdoutTruncated || read.stdout.byteLength > maxFileBytes) return { status: 'unverified', error: 'The requested file could not be read within the size limit.', file };
   const bytes = read.stdout;
   file.bytes = bytes.byteLength;
   file.sha256 = sha256(bytes);
@@ -706,6 +707,10 @@ function validate(config) {
       if (checkType !== 'command') errors.push(`${at}.maxOutputBytes: is supported only for command checks.`);
       if (!Number.isInteger(check.maxOutputBytes) || check.maxOutputBytes < 1024 || check.maxOutputBytes > 1_048_576) errors.push(`${at}.maxOutputBytes: must be an integer from 1024 to 1048576 bytes.`);
     }
+    if (typeof check.maxFileBytes !== 'undefined') {
+      if (checkType !== 'file') errors.push(`${at}.maxFileBytes: is supported only for file checks.`);
+      if (!Number.isInteger(check.maxFileBytes) || check.maxFileBytes < 1 || check.maxFileBytes > MAX_FILE_CHECK_BYTES) errors.push(`${at}.maxFileBytes: must be an integer from 1 to ${MAX_FILE_CHECK_BYTES} bytes.`);
+    }
     if (typeof check.stdin !== 'undefined') {
       if (checkType !== 'command') errors.push(`${at}.stdin: is supported only for command checks.`);
       if (typeof check.stdin !== 'string' || characterCount(check.stdin) > 65_536) errors.push(`${at}.stdin: must be a string of at most 65536 characters.`);
@@ -886,7 +891,7 @@ function markdownReport(report, evidenceFiles, manifestPath) {
     }
     if (check.file) {
       const outcome = check.file.matched ? 'matched' : check.status === 'failed' ? 'did not match' : 'could not be verified';
-      lines.push('', `File assertion: ${markdownCode(check.file.assertion)} on ${markdownCode(check.file.path)} — ${outcome}${check.file.sha256 ? `; SHA-256 ${markdownCode(check.file.sha256)}` : ''}${check.file.bytes != null ? `; ${check.file.bytes} bytes` : ''}.`);
+      lines.push('', `File assertion: ${markdownCode(check.file.assertion)} on ${markdownCode(check.file.path)} — ${outcome}${check.file.sha256 ? `; SHA-256 ${markdownCode(check.file.sha256)}` : ''}${check.file.bytes != null ? `; ${check.file.bytes} bytes` : ''}; read cap ${check.file.maxFileBytes} bytes.`);
     }
     if (check.outputAssertions) {
       for (const stream of ['stdout', 'stderr']) {
@@ -1016,7 +1021,7 @@ export async function main(argv = process.argv.slice(2)) {
       ].filter((value) => typeof value === 'string'))].sort((a, b) => b.length - a.length);
       const add = await runGit(repository, ['worktree', 'add', '--detach', '--quiet', worktree, commit]);
       if (add.code !== 0) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, status: 'unverified', error: add.stderr.trim() || 'Unable to create isolated verification worktree.', file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, status: 'unverified', error: add.stderr.trim() || 'Unable to create isolated verification worktree.', file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false, maxFileBytes: check.maxFileBytes ?? MAX_FILE_CHECK_BYTES } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
         console.log(`UNVERIFIED ${check.id}`);
         continue;
       }
@@ -1141,7 +1146,7 @@ export async function main(argv = process.argv.slice(2)) {
           http: result.http,
         });
       } catch (error) {
-        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: redactString(Array.isArray(check.command) ? JSON.stringify(check.command) : check.command, checkRedactions), status: 'unverified', error: redactString(error.message, checkRedactions), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
+        results.push({ id: check.id, type: check.type ?? 'command', criteria: check.criteria, command: redactString(Array.isArray(check.command) ? JSON.stringify(check.command) : check.command, checkRedactions), status: 'unverified', error: redactString(error.message, checkRedactions), file: check.type === 'file' ? { path: check.path, assertion: check.assertion, exists: false, bytes: null, sha256: null, matched: false, maxFileBytes: check.maxFileBytes ?? MAX_FILE_CHECK_BYTES } : undefined, http: check.type === 'http' ? unavailableHttpResult(check) : undefined, startedAt: checkStarted });
       } finally {
         await runGit(repository, ['worktree', 'remove', '--force', worktree]);
       }

@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.33.0 — Per-check file byte limit
+
+PRD: [`docs/PRD-0.33.0-per-check-file-byte-limit.md`](./docs/PRD-0.33.0-per-check-file-byte-limit.md)
+
+- Allow file checks to lower their blob read cap while preserving the global 1 MiB maximum.
+
 ## Completed: 0.32.0 — HTTP JSON Pointer existence assertions
 
 PRD: [`docs/PRD-0.32.0-http-json-pointer-exists.md`](./docs/PRD-0.32.0-http-json-pointer-exists.md)
