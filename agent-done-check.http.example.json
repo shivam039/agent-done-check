@@ -35,6 +35,17 @@
       "criteria": [
         "deployment"
       ]
+    },
+    {
+      "id": "health-data-field-exists",
+      "type": "http",
+      "url": "https://example.invalid/health.json",
+      "bodyJsonPointerExists": {
+        "pointer": "/status"
+      },
+      "criteria": [
+        "deployment"
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "name": "agent-done-check",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "description": "Verify commit-bound acceptance criteria with commands, files, HTTP, and optional Playwright checks.",
   "license": "MIT",
   "type": "module",
@@ -42,6 +42,7 @@
     "docs/PRD-0.29.0-http-required-headers.md",
     "docs/PRD-0.30.0-http-content-type.md",
     "docs/PRD-0.31.0-http-response-content-type.md",
+    "docs/PRD-0.32.0-http-json-pointer-exists.md",
     "docs/PRD-0.5.0-stable-integration-contract.md",
     "docs/PRD-0.6.0-commit-bound-file-checks.md",
     "docs/PRD-0.7.0-commit-bound-http-checks.md",
