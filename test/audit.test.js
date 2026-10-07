@@ -1425,6 +1425,66 @@ test('HTTP content type assertions normalize case and parameters before body rea
   assert.equal((await validate()).code, 2);
 });
 
+test('HTTP exact body text assertions are commit-bound, bounded, and private', async (t) => {
+  const root = await repository(t);
+  let targetCommit;
+  const privateBody = 'response-private-value';
+  const server = createServer((request, response) => {
+    if (request.url !== '/unbound') response.setHeader('x-agent-done-check-commit', targetCommit);
+    if (request.url === '/invalid-utf8') { response.end(Buffer.from([0xff, 0xfe])); return; }
+    if (request.url === '/oversized') { response.end(Buffer.alloc(32, 65)); return; }
+    if (request.url === '/mismatch') { response.end(`${privateBody} `); return; }
+    response.end(request.url === '/empty' ? '' : privateBody);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const port = server.address().port;
+  const check = (id, route, expected) => ({ id, type: 'http', url: `http://127.0.0.1:${port}${route}`, bodyEquals: expected, criteria: ['body-text'] });
+  const config = {
+    version: 1,
+    criteria: [{ id: 'body-text', description: 'The bound HTTP response body matches the expected text.' }],
+    checks: [
+      check('match', '/match', privateBody),
+      check('mismatch', '/mismatch', privateBody),
+      check('empty', '/empty', ''),
+      check('invalid-utf8', '/invalid-utf8', 'expected'),
+      check('unbound', '/unbound', privateBody),
+      { ...check('oversized', '/oversized', ''), maxBodyBytes: 8 },
+    ],
+  };
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  targetCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const result = await invokeAsync(root, ['--commit', targetCommit]);
+  assert.equal(result.code, 1);
+  const checks = Object.fromEntries(result.report.checks.map((entry) => [entry.id, entry]));
+  assert.equal(checks.match.status, 'passed');
+  assert.equal(checks.match.http.bodyEqualsMatched, true);
+  assert.equal(checks.mismatch.status, 'failed');
+  assert.equal(checks.mismatch.http.bodyEqualsMatched, false);
+  assert.equal(checks.empty.status, 'passed');
+  assert.equal(checks.empty.http.bodyEqualsMatched, true);
+  assert.equal(checks['invalid-utf8'].status, 'unverified');
+  assert.equal(checks['invalid-utf8'].http.bodyEqualsMatched, null);
+  assert.equal(checks.unbound.status, 'unverified');
+  assert.equal(checks.unbound.http.bodyEqualsMatched, null);
+  assert.equal(checks.oversized.status, 'unverified');
+  assert.equal(checks.oversized.http.bodyEqualsMatched, null);
+  const markdown = await readFile(path.join(root, '.agent-done-check/report.md'), 'utf8');
+  for (const output of [JSON.stringify(result.report), markdown]) assert.doesNotMatch(output, /response-private-value/);
+
+  const validate = async () => {
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(config));
+    return invoke(root, ['--validate']);
+  };
+  config.checks[0].bodyEquals = 12;
+  assert.equal((await validate()).code, 2);
+  config.checks[0].bodyEquals = 'x'.repeat(1_048_577);
+  assert.equal((await validate()).code, 2);
+  config.checks[0].bodyEquals = '';
+  config.checks[0].type = 'command'; config.checks[0].command = 'node --version';
+  assert.equal((await validate()).code, 2);
+});
+
 test('commit-bound JSON Pointer file assertions compare typed values without exposing them', async (t) => {
   const root = await repository(t);
   const expectedSecret = 'json-pointer-private-value';

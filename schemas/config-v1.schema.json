@@ -306,6 +306,10 @@
         "bodyContains": {
           "type": "string"
         },
+        "bodyEquals": {
+          "type": "string",
+          "maxLength": 1048576
+        },
         "responseHeaders": {
           "type": "object",
           "maxProperties": 20,

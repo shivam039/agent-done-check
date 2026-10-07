@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.35.0 — Exact HTTP body text assertions
+
+PRD: [`docs/PRD-0.35.0-http-exact-body-text.md`](./docs/PRD-0.35.0-http-exact-body-text.md)
+
+- Compare a complete bounded UTF-8 HTTP response body with configured text after commit binding.
+
 ## Completed: 0.34.0 — Exact command output assertions
 
 PRD: [`docs/PRD-0.34.0-command-exact-output.md`](./docs/PRD-0.34.0-command-exact-output.md)
