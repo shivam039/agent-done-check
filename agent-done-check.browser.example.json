@@ -30,6 +30,7 @@
         { "action": "expectCount", "selector": "[data-testid=search-result]", "count": 3 },
         { "action": "expectTitle", "value": "Dashboard", "exact": true },
         { "action": "expectAccessibleName", "selector": "button[type=submit]", "role": "button", "value": "Sign in" },
+        { "action": "expectAccessibleDescription", "selector": "button[type=submit]", "role": "button", "value": "account details" },
         { "action": "expectClass", "selector": "button[type=submit]", "className": "is-ready", "present": true },
         { "action": "expectAttributeExists", "selector": "[role=status]", "attribute": "aria-live" },
         { "action": "expectEnabled", "selector": "button[type=submit]" },

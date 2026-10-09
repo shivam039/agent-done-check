@@ -853,7 +853,7 @@ module.exports = {
             waitForURL: async () => {},
             title: async () => 'Dashboard',
             getByRole: (role, options) => ({ role, ...options }),
-            locator: (selector) => ({ first() { return this; }, and: (role) => ({ count: async () => selector === '.named' && role.role === 'button' && (role.exact ? role.name === 'Save changes' : 'Save changes'.includes(role.name)) ? 1 : 0 }), fill: async () => {}, waitFor: async () => {}, innerText: async () => selector === '.named' ? 'Save changes' : 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? selector === '.named' ? 'Save changes' : selector === '[role=status]' ? 'Ready' : null : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async (_fn, token) => selector === '.focused' || (selector === '.classed' && token === 'is-active') }),
+            locator: (selector) => ({ first() { return this; }, and: (role) => ({ count: async () => selector === '.named' && role.role === 'button' && (role.exact ? role.name === 'Save changes' : 'Save changes'.includes(role.name)) || selector === '.described' && role.role === 'button' && (role.exact ? role.description === 'Additional help' : 'Additional help'.includes(role.description)) ? 1 : 0 }), fill: async () => {}, waitFor: async () => {}, innerText: async () => selector === '.named' ? 'Save changes' : 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? selector === '.named' ? 'Save changes' : selector === '[role=status]' ? 'Ready' : null : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async (_fn, token) => selector === '.focused' || (selector === '.classed' && token === 'is-active') }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -887,6 +887,8 @@ module.exports = {
       { action: 'expectClass', selector: '.classed', className: 'is-old', present: false },
       { action: 'expectAccessibleName', selector: '.named', role: 'button', value: 'Save' },
       { action: 'expectAccessibleName', selector: '.named', role: 'button', value: 'Save changes', exact: true },
+      { action: 'expectAccessibleDescription', selector: '.described', role: 'button', value: 'help' },
+      { action: 'expectAccessibleDescription', selector: '.described', role: 'button', value: 'Additional help', exact: true },
     ],
     failOnHttpError: false,
   });
@@ -1018,6 +1020,30 @@ test('browser accessible-name assertions match exact or substring names without 
   assert.equal(failure.code, 1);
   const reportText = await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8');
   assert.doesNotMatch(reportText, /sensitive accessible name|Save changes/);
+});
+
+test('browser accessible-description assertions validate the role and match exact or substring text privately', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ id: 'accessible-description', type: 'playwright', url: 'https://example.invalid/', steps: [
+    { action: 'expectAccessibleDescription', selector: '.button', role: 'button', value: 'help' },
+    { action: 'expectAccessibleDescription', selector: '.button', role: 'button', value: 'Additional help', exact: true },
+  ] });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  let result = await invoke(root, ['--validate']);
+  assert.equal(result.code, 0, result.stderr);
+
+  for (const mutate of [
+    (step) => { delete step.role; },
+    (step) => { delete step.value; },
+    (step) => { step.role = 'not-a-role'; },
+    (step) => { step.exact = 'yes'; },
+  ]) {
+    const invalid = structuredClone(config);
+    mutate(invalid.checks[0].steps[0]);
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(invalid));
+    result = await invoke(root, ['--validate']);
+    assert.equal(result.code, 2, result.stderr || result.stdout);
+  }
 });
 
 test('browser class assertions use a single exact token and require a boolean presence state', async (t) => {

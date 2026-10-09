@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.45.0 — Playwright accessible-description assertion
+
+PRD: [`docs/PRD-0.45.0-playwright-accessible-description.md`](./docs/PRD-0.45.0-playwright-accessible-description.md)
+
+- Match a selected element's computed accessible description without emitting it in failures.
+
 ## Completed: 0.44.0 — Playwright class-token assertion
 
 PRD: [`docs/PRD-0.44.0-playwright-class-token-assertion.md`](./docs/PRD-0.44.0-playwright-class-token-assertion.md)

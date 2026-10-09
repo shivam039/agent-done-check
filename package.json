@@ -1,6 +1,6 @@
 {
   "name": "agent-done-check",
-  "version": "0.44.0",
+  "version": "0.45.0",
   "description": "Verify commit-bound acceptance criteria with commands, files, HTTP, and optional Playwright checks.",
   "license": "MIT",
   "type": "module",
@@ -63,7 +63,8 @@
     "examples",
     "schemas",
     "src",
-    "docs/PRD-0.44.0-playwright-class-token-assertion.md"
+    "docs/PRD-0.44.0-playwright-class-token-assertion.md",
+    "docs/PRD-0.45.0-playwright-accessible-description.md"
   ],
   "scripts": {
     "start": "node ./bin/agent-done-check.js",
