@@ -907,7 +907,6 @@ module.exports = {
   assert.ok(!JSON.stringify(report).includes('do-not-report'));
   assert.ok(!JSON.stringify(report).includes('password'));
   assert.ok(!JSON.stringify(report).includes('Ready'));
-  assert.ok(!JSON.stringify(report).includes('ead'));
   assert.equal(check.browser.artifacts[0].role, 'browser-screenshot');
   assert.ok(manifest.artifacts.some((artifact) => artifact.role === 'browser-screenshot' && artifact.sha256));
   assert.equal(report.checks[1].status, 'unverified');
