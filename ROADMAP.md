@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.43.0 — Playwright accessible-name assertions
+
+PRD: [`docs/PRD-0.43.0-playwright-accessible-name.md`](./docs/PRD-0.43.0-playwright-accessible-name.md)
+
+- Match a selected element's computed accessible name without echoing names in errors.
+
 ## Completed: 0.42.0 — Playwright attribute presence assertions
 
 PRD: [`docs/PRD-0.42.0-playwright-attribute-presence.md`](./docs/PRD-0.42.0-playwright-attribute-presence.md)

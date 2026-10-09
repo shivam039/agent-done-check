@@ -50,6 +50,18 @@ async function waitForText(locator, expected, timeoutMs, exact = false) {
   throw new Error(`Expected text ${JSON.stringify(expected)}; last text was ${JSON.stringify(lastText)}.`);
 }
 
+async function waitForAccessibleName(page, step, timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  const matchingRole = page.getByRole(step.role, { name: step.value, exact: step.exact === true });
+  const matchingElement = page.locator(step.selector).and(matchingRole);
+  while (Date.now() < end) {
+    const count = await matchingElement.count().catch(() => 0);
+    if (count > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('Expected selected element accessible name to match configured text.');
+}
+
 async function waitForValue(locator, expected, timeoutMs) {
   const end = Date.now() + timeoutMs;
   let lastValue;
@@ -137,6 +149,10 @@ async function waitForFocused(locator, timeoutMs) {
 async function performStep(page, step, timeoutMs) {
   if (step.action === 'expectTitle') {
     await waitForTitle(page, step.value, timeoutMs, step.exact === true);
+    return;
+  }
+  if (step.action === 'expectAccessibleName') {
+    await waitForAccessibleName(page, step, timeoutMs);
     return;
   }
   if (step.action === 'expectEnabled' || step.action === 'expectDisabled') {
