@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.39.0 — Playwright enabled-state assertions
+
+PRD: [`docs/PRD-0.39.0-playwright-enabled-state.md`](./docs/PRD-0.39.0-playwright-enabled-state.md)
+
+- Verify a selected control is enabled or disabled in a commit-bound browser check.
+
 ## Completed: 0.38.0 — Playwright document title assertions
 
 PRD: [`docs/PRD-0.38.0-playwright-title-assertion.md`](./docs/PRD-0.38.0-playwright-title-assertion.md)

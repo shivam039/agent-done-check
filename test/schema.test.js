@@ -62,6 +62,12 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
   assertValid(validateConfig, attributeConfig, 'Playwright title assertion');
   delete attributeConfig.checks[0].steps[0].value;
   assert.equal(validateConfig(attributeConfig), false);
+  attributeConfig.checks[0].steps[0] = { action: 'expectEnabled', selector: '#submit' };
+  assertValid(validateConfig, attributeConfig, 'Playwright enabled-state assertion');
+  attributeConfig.checks[0].steps[0] = { action: 'expectDisabled', selector: '#submit' };
+  assertValid(validateConfig, attributeConfig, 'Playwright disabled-state assertion');
+  attributeConfig.checks[0].steps[0] = { action: 'expectEnabled' };
+  assert.equal(validateConfig(attributeConfig), false);
   attributeConfig.checks[0].steps[0] = { action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'Ready' };
   assertValid(validateConfig, attributeConfig, 'Playwright attribute assertion after title validation');
   attributeConfig.checks[0].steps[0].attribute = 'x'.repeat(257);
