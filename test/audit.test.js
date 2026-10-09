@@ -851,6 +851,7 @@ module.exports = {
               handlers.console({ type: () => 'error', location: () => ({ url }), text: () => 'failed to submit replace-with-test-credential' });
             },
             waitForURL: async () => {},
+            title: async () => 'Dashboard',
             locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null, count: async () => selector === '.result' ? 3 : 0 }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
@@ -872,6 +873,8 @@ module.exports = {
       { action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'ead' },
       { action: 'expectCount', selector: '.result', count: 3 },
       { action: 'expectCount', selector: '.empty-state', count: 0 },
+      { action: 'expectTitle', value: 'Dashboard', exact: true },
+      { action: 'expectTitle', value: 'board' },
     ],
     failOnHttpError: false,
   });
@@ -934,6 +937,16 @@ test('browser attribute assertion config validation rejects missing and malforme
     result = await invoke(root, ['--validate']);
     assert.equal(result.code, 2, result.stderr || result.stdout);
   }
+
+  const titleConfig = structuredClone(config);
+  titleConfig.checks[0].steps = [{ action: 'expectTitle', value: 'Dashboard' }];
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(titleConfig));
+  result = await invoke(root, ['--validate']);
+  assert.equal(result.code, 0, result.stderr);
+  titleConfig.checks[0].steps[0].value = 1;
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(titleConfig));
+  result = await invoke(root, ['--validate']);
+  assert.equal(result.code, 2, result.stderr || result.stdout);
 });
 
 test('timeout terminates descendant processes and marks the criterion unverified', async (t) => {

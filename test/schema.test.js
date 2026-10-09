@@ -58,8 +58,12 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
   assert.equal(validateConfig(attributeConfig), false);
   attributeConfig.checks[0].steps[0] = countStep;
   assertValid(validateConfig, attributeConfig, 'Playwright attribute assertion');
-  delete attributeConfig.checks[0].steps[0].attribute;
+  attributeConfig.checks[0].steps[0] = { action: 'expectTitle', value: 'Dashboard', exact: true };
+  assertValid(validateConfig, attributeConfig, 'Playwright title assertion');
+  delete attributeConfig.checks[0].steps[0].value;
   assert.equal(validateConfig(attributeConfig), false);
+  attributeConfig.checks[0].steps[0] = { action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'Ready' };
+  assertValid(validateConfig, attributeConfig, 'Playwright attribute assertion after title validation');
   attributeConfig.checks[0].steps[0].attribute = 'x'.repeat(257);
   assert.equal(validateConfig(attributeConfig), false);
   attributeConfig.checks[0].steps[0].attribute = 'aria-label';

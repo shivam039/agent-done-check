@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.38.0 — Playwright document title assertions
+
+PRD: [`docs/PRD-0.38.0-playwright-title-assertion.md`](./docs/PRD-0.38.0-playwright-title-assertion.md)
+
+- Assert that a commit-bound browser page title contains or exactly matches configured text.
+
 ## Completed: 0.37.0 — Playwright element count assertions
 
 PRD: [`docs/PRD-0.37.0-playwright-count-assertion.md`](./docs/PRD-0.37.0-playwright-count-assertion.md)
