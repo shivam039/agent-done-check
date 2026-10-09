@@ -260,10 +260,12 @@ PRD: [`docs/PRD-0.30.0-http-content-type.md`](./docs/PRD-0.30.0-http-content-typ
 
 - Assert the normalized response media type after commit binding and before reading its body.
 
-## Completed: 0.31.0 — Normalized HTTP content-type evidence evidence
+## Completed: 0.31.0 — Normalized HTTP content-type evidence
 
 PRD: [`docs/PRD-0.31.0-http-response-content-type.md`](./docs/PRD-0.31.0-http-response-content-type.md)
 
 - Record a normalized media type after commit binding without exposing parameters.
 
 ## Later
+
+The broad release gate for 1.0 is tracked in [`docs/v1-readiness-checklist.md`](./docs/v1-readiness-checklist.md). Items remain pending until their evidence is recorded there; completing feature releases alone does not make the project ready for 1.0.
