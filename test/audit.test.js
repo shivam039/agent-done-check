@@ -852,7 +852,7 @@ module.exports = {
             },
             waitForURL: async () => {},
             title: async () => 'Dashboard',
-            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null, count: async () => selector === '.result' ? 3 : 0 }),
+            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled' }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -875,6 +875,8 @@ module.exports = {
       { action: 'expectCount', selector: '.empty-state', count: 0 },
       { action: 'expectTitle', value: 'Dashboard', exact: true },
       { action: 'expectTitle', value: 'board' },
+      { action: 'expectEnabled', selector: '.enabled' },
+      { action: 'expectDisabled', selector: '.disabled' },
     ],
     failOnHttpError: false,
   });

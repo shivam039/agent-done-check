@@ -94,9 +94,23 @@ async function waitForTitle(page, expected, timeoutMs, exact = false) {
   throw new Error(`Expected page title ${JSON.stringify(expected)}; last title was ${JSON.stringify(lastTitle)}.`);
 }
 
+async function waitForEnabled(locator, expected, timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const enabled = await locator.isEnabled().catch(() => null);
+    if (enabled === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Expected selected element to be ${expected ? 'enabled' : 'disabled'}.`);
+}
+
 async function performStep(page, step, timeoutMs) {
   if (step.action === 'expectTitle') {
     await waitForTitle(page, step.value, timeoutMs, step.exact === true);
+    return;
+  }
+  if (step.action === 'expectEnabled' || step.action === 'expectDisabled') {
+    await waitForEnabled(page.locator(step.selector).first(), step.action === 'expectEnabled', timeoutMs);
     return;
   }
   if (step.action === 'expectUrl') {
