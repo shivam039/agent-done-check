@@ -100,6 +100,7 @@
             "expectText",
             "expectValue",
             "expectAccessibleName",
+            "expectAccessibleDescription",
             "expectClass",
             "expectAttribute",
             "expectAttributeExists",
@@ -150,7 +151,7 @@
       "allOf": [
         {
           "if": {
-            "properties": { "action": { "const": "expectAccessibleName" } },
+            "properties": { "action": { "enum": ["expectAccessibleName", "expectAccessibleDescription"] } },
             "required": ["action"]
           },
           "then": { "properties": { "role": {} }, "required": ["role"] },
@@ -270,6 +271,7 @@
                   "expectText",
                   "expectValue",
                   "expectAccessibleName",
+                  "expectAccessibleDescription",
                   "expectAttribute",
                   "expectTitle"
                 ]
