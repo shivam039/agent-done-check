@@ -62,6 +62,16 @@ async function waitForAccessibleName(page, step, timeoutMs) {
   throw new Error('Expected selected element accessible name to match configured text.');
 }
 
+async function waitForClass(locator, className, expected, timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const present = await locator.evaluate((element, token) => element.classList.contains(token), className).catch(() => null);
+    if (present === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Expected selected element class token to be ${expected ? 'present' : 'absent'}.`);
+}
+
 async function waitForValue(locator, expected, timeoutMs) {
   const end = Date.now() + timeoutMs;
   let lastValue;
@@ -153,6 +163,10 @@ async function performStep(page, step, timeoutMs) {
   }
   if (step.action === 'expectAccessibleName') {
     await waitForAccessibleName(page, step, timeoutMs);
+    return;
+  }
+  if (step.action === 'expectClass') {
+    await waitForClass(page.locator(step.selector).first(), step.className, step.present, timeoutMs);
     return;
   }
   if (step.action === 'expectEnabled' || step.action === 'expectDisabled') {
