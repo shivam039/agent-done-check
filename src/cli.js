@@ -835,7 +835,7 @@ function validate(config) {
       else if (check.steps.length > MAX_STEPS) errors.push(`${at}.steps: no more than ${MAX_STEPS} browser steps are allowed.`);
       else for (const [stepIndex, step] of check.steps.entries()) {
         const stepAt = `${at}.steps[${stepIndex}]`;
-        const actions = ['click', 'fill', 'check', 'uncheck', 'selectOption', 'press', 'expectVisible', 'expectHidden', 'expectText', 'expectValue', 'expectAttribute', 'expectCount', 'expectTitle', 'expectEnabled', 'expectDisabled', 'expectUrl'];
+        const actions = ['click', 'fill', 'check', 'uncheck', 'selectOption', 'press', 'expectVisible', 'expectHidden', 'expectText', 'expectValue', 'expectAttribute', 'expectCount', 'expectTitle', 'expectEnabled', 'expectDisabled', 'expectChecked', 'expectUnchecked', 'expectUrl'];
         if (!step || typeof step !== 'object' || Array.isArray(step)) { errors.push(`${stepAt}: must be an object.`); continue; }
         if (!actions.includes(step.action)) errors.push(`${stepAt}.action: unsupported browser action.`);
         if (!['expectUrl', 'expectTitle'].includes(step.action) && (typeof step.selector !== 'string' || !step.selector.trim())) errors.push(`${stepAt}.selector: required for this action.`);
