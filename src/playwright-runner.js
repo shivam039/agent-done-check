@@ -72,6 +72,17 @@ async function waitForAttribute(locator, attribute, expected, timeoutMs, exact =
   throw new Error(`Expected attribute ${JSON.stringify(attribute)} ${exact ? 'to equal' : 'to contain'} ${JSON.stringify(expected)}; last value was ${JSON.stringify(lastValue)}.`);
 }
 
+async function waitForCount(locator, expected, timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  let lastCount = null;
+  while (Date.now() < end) {
+    lastCount = await locator.count().catch(() => null);
+    if (lastCount === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Expected ${expected} matching elements; last count was ${lastCount}.`);
+}
+
 async function performStep(page, step, timeoutMs) {
   if (step.action === 'expectUrl') {
     await page.waitForURL((url) => step.exact ? url.href === step.value : url.href.includes(step.value), { timeout: timeoutMs });
@@ -89,6 +100,7 @@ async function performStep(page, step, timeoutMs) {
   else if (step.action === 'expectText') await waitForText(locator, step.value, timeoutMs, step.exact === true);
   else if (step.action === 'expectValue') await waitForValue(locator, step.value, timeoutMs);
   else if (step.action === 'expectAttribute') await waitForAttribute(locator, step.attribute, step.value, timeoutMs, step.exact === true);
+  else if (step.action === 'expectCount') await waitForCount(page.locator(step.selector), step.count, timeoutMs);
 }
 
 async function main() {

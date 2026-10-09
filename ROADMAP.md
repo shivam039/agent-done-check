@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.37.0 — Playwright element count assertions
+
+PRD: [`docs/PRD-0.37.0-playwright-count-assertion.md`](./docs/PRD-0.37.0-playwright-count-assertion.md)
+
+- Assert a CSS selector matches an exact number of elements, including zero.
+
 ## Completed: 0.36.0 — Playwright attribute assertions
 
 PRD: [`docs/PRD-0.36.0-playwright-attribute-assertion.md`](./docs/PRD-0.36.0-playwright-attribute-assertion.md)

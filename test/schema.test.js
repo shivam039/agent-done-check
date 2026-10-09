@@ -47,6 +47,16 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
     criteria: [{ id: 'browser', description: 'The page exposes the expected state.' }],
     checks: [{ id: 'attribute', type: 'playwright', url: 'https://example.invalid/', steps: [{ action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'Ready', exact: true }], criteria: ['browser'] }],
   };
+  const countStep = attributeConfig.checks[0].steps[0];
+  attributeConfig.checks[0].steps[0] = { action: 'expectCount', selector: '.result', count: 0 };
+  assertValid(validateConfig, attributeConfig, 'Playwright zero count assertion');
+  delete attributeConfig.checks[0].steps[0].count;
+  assert.equal(validateConfig(attributeConfig), false);
+  attributeConfig.checks[0].steps[0].count = 1.5;
+  assert.equal(validateConfig(attributeConfig), false);
+  attributeConfig.checks[0].steps[0].count = 1_000_001;
+  assert.equal(validateConfig(attributeConfig), false);
+  attributeConfig.checks[0].steps[0] = countStep;
   assertValid(validateConfig, attributeConfig, 'Playwright attribute assertion');
   delete attributeConfig.checks[0].steps[0].attribute;
   assert.equal(validateConfig(attributeConfig), false);
