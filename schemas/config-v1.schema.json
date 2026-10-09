@@ -101,6 +101,7 @@
             "expectValue",
             "expectAttribute",
             "expectCount",
+            "expectTitle",
             "expectUrl"
           ]
         },
@@ -164,7 +165,7 @@
           "if": {
             "properties": {
               "action": {
-                "const": "expectUrl"
+                "enum": ["expectUrl", "expectTitle"]
               }
             },
             "required": [
@@ -198,7 +199,8 @@
                   "press",
                   "expectText",
                   "expectValue",
-                  "expectAttribute"
+                  "expectAttribute",
+                  "expectTitle"
                 ]
               }
             },

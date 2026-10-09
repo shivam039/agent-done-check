@@ -83,7 +83,22 @@ async function waitForCount(locator, expected, timeoutMs) {
   throw new Error(`Expected ${expected} matching elements; last count was ${lastCount}.`);
 }
 
+async function waitForTitle(page, expected, timeoutMs, exact = false) {
+  const end = Date.now() + timeoutMs;
+  let lastTitle = '';
+  while (Date.now() < end) {
+    lastTitle = await page.title().catch(() => '');
+    if (exact ? lastTitle === expected : lastTitle.includes(expected)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Expected page title ${JSON.stringify(expected)}; last title was ${JSON.stringify(lastTitle)}.`);
+}
+
 async function performStep(page, step, timeoutMs) {
+  if (step.action === 'expectTitle') {
+    await waitForTitle(page, step.value, timeoutMs, step.exact === true);
+    return;
+  }
   if (step.action === 'expectUrl') {
     await page.waitForURL((url) => step.exact ? url.href === step.value : url.href.includes(step.value), { timeout: timeoutMs });
     return;
