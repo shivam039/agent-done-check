@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.44.0 — Playwright class-token assertion
+
+PRD: [`docs/PRD-0.44.0-playwright-class-token-assertion.md`](./docs/PRD-0.44.0-playwright-class-token-assertion.md)
+
+- Assert exact CSS class token presence or absence without leaking class lists.
+
 ## Completed: 0.43.0 — Playwright accessible-name assertions
 
 PRD: [`docs/PRD-0.43.0-playwright-accessible-name.md`](./docs/PRD-0.43.0-playwright-accessible-name.md)

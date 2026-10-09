@@ -2,6 +2,10 @@
 
 This project is pre-1.0. Releases are experimental and may include breaking changes; see [compatibility and migration policy](./docs/compatibility.md).
 
+## 0.44.0 — 2026-10-09
+
+- Add Playwright exact CSS class-token presence and absence assertions.
+
 ## 0.43.0 — 2026-10-09
 
 - Add Playwright computed accessible-name assertions with exact or substring matching.

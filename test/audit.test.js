@@ -853,7 +853,7 @@ module.exports = {
             waitForURL: async () => {},
             title: async () => 'Dashboard',
             getByRole: (role, options) => ({ role, ...options }),
-            locator: (selector) => ({ first() { return this; }, and: (role) => ({ count: async () => selector === '.named' && role.role === 'button' && (role.exact ? role.name === 'Save changes' : 'Save changes'.includes(role.name)) ? 1 : 0 }), fill: async () => {}, waitFor: async () => {}, innerText: async () => selector === '.named' ? 'Save changes' : 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? selector === '.named' ? 'Save changes' : selector === '[role=status]' ? 'Ready' : null : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async () => selector === '.focused' }),
+            locator: (selector) => ({ first() { return this; }, and: (role) => ({ count: async () => selector === '.named' && role.role === 'button' && (role.exact ? role.name === 'Save changes' : 'Save changes'.includes(role.name)) ? 1 : 0 }), fill: async () => {}, waitFor: async () => {}, innerText: async () => selector === '.named' ? 'Save changes' : 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? selector === '.named' ? 'Save changes' : selector === '[role=status]' ? 'Ready' : null : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async (_fn, token) => selector === '.focused' || (selector === '.classed' && token === 'is-active') }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -883,6 +883,8 @@ module.exports = {
       { action: 'expectFocused', selector: '.focused' },
       { action: 'expectAttributeExists', selector: '.inert', attribute: 'inert' },
       { action: 'expectAttributeMissing', selector: '.missing-attribute', attribute: 'aria-hidden' },
+      { action: 'expectClass', selector: '.classed', className: 'is-active', present: true },
+      { action: 'expectClass', selector: '.classed', className: 'is-old', present: false },
       { action: 'expectAccessibleName', selector: '.named', role: 'button', value: 'Save' },
       { action: 'expectAccessibleName', selector: '.named', role: 'button', value: 'Save changes', exact: true },
     ],
@@ -1016,6 +1018,33 @@ test('browser accessible-name assertions match exact or substring names without 
   assert.equal(failure.code, 1);
   const reportText = await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8');
   assert.doesNotMatch(reportText, /sensitive accessible name|Save changes/);
+});
+
+test('browser class assertions use a single exact token and require a boolean presence state', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ id: 'class-token', type: 'playwright', url: 'https://example.invalid/', steps: [
+    { action: 'expectClass', selector: '.button', className: 'is-active', present: true },
+    { action: 'expectClass', selector: '.button', className: 'is-disabled', present: false },
+  ] });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  let result = await invoke(root, ['--validate']);
+  assert.equal(result.code, 0, result.stderr);
+
+  for (const mutate of [
+    (step) => { delete step.className; },
+    (step) => { step.className = 'is active'; },
+    (step) => { step.className = 'x'.repeat(257); },
+    (step) => { delete step.present; },
+    (step) => { step.present = 'true'; },
+    (step) => { step.value = 'is-active'; },
+    (step) => { step.unknown = true; },
+  ]) {
+    const invalid = structuredClone(config);
+    mutate(invalid.checks[0].steps[0]);
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(invalid));
+    result = await invoke(root, ['--validate']);
+    assert.equal(result.code, 2, result.stderr || result.stdout);
+  }
 });
 
 test('timeout terminates descendant processes and marks the criterion unverified', async (t) => {

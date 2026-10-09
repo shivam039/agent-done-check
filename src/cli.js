@@ -835,7 +835,7 @@ function validate(config) {
       else if (check.steps.length > MAX_STEPS) errors.push(`${at}.steps: no more than ${MAX_STEPS} browser steps are allowed.`);
       else for (const [stepIndex, step] of check.steps.entries()) {
         const stepAt = `${at}.steps[${stepIndex}]`;
-        const actions = ['click', 'fill', 'check', 'uncheck', 'selectOption', 'press', 'expectVisible', 'expectHidden', 'expectText', 'expectValue', 'expectAccessibleName', 'expectAttribute', 'expectAttributeExists', 'expectAttributeMissing', 'expectCount', 'expectTitle', 'expectEnabled', 'expectDisabled', 'expectChecked', 'expectUnchecked', 'expectFocused', 'expectUrl'];
+        const actions = ['click', 'fill', 'check', 'uncheck', 'selectOption', 'press', 'expectVisible', 'expectHidden', 'expectText', 'expectValue', 'expectAccessibleName', 'expectClass', 'expectAttribute', 'expectAttributeExists', 'expectAttributeMissing', 'expectCount', 'expectTitle', 'expectEnabled', 'expectDisabled', 'expectChecked', 'expectUnchecked', 'expectFocused', 'expectUrl'];
         if (!step || typeof step !== 'object' || Array.isArray(step)) { errors.push(`${stepAt}: must be an object.`); continue; }
         if (!actions.includes(step.action)) errors.push(`${stepAt}.action: unsupported browser action.`);
         if (!['expectUrl', 'expectTitle'].includes(step.action) && (typeof step.selector !== 'string' || !step.selector.trim())) errors.push(`${stepAt}.selector: required for this action.`);
@@ -843,6 +843,14 @@ function validate(config) {
         const roles = ['alert', 'alertdialog', 'application', 'article', 'banner', 'blockquote', 'button', 'caption', 'cell', 'checkbox', 'code', 'columnheader', 'combobox', 'complementary', 'contentinfo', 'definition', 'deletion', 'dialog', 'directory', 'document', 'emphasis', 'feed', 'figure', 'form', 'generic', 'grid', 'gridcell', 'group', 'heading', 'img', 'insertion', 'link', 'list', 'listbox', 'listitem', 'log', 'main', 'marquee', 'math', 'meter', 'menu', 'menubar', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'navigation', 'none', 'note', 'option', 'paragraph', 'presentation', 'progressbar', 'radio', 'radiogroup', 'region', 'row', 'rowgroup', 'rowheader', 'scrollbar', 'search', 'searchbox', 'separator', 'slider', 'spinbutton', 'status', 'strong', 'subscript', 'superscript', 'switch', 'tab', 'table', 'tablist', 'tabpanel', 'term', 'textbox', 'time', 'timer', 'toolbar', 'tooltip', 'tree', 'treegrid', 'treeitem'];
         if (step.action === 'expectAccessibleName' && !roles.includes(step.role)) errors.push(`${stepAt}.role: must be a supported ARIA role for expectAccessibleName.`);
         else if (typeof step.role !== 'undefined' && step.action !== 'expectAccessibleName') errors.push(`${stepAt}.role: is supported only for expectAccessibleName.`);
+        if (step.action === 'expectClass' && (typeof step.className !== 'string' || !step.className.trim() || /\s/.test(step.className) || characterCount(step.className) > 256)) errors.push(`${stepAt}.className: must be a single non-empty class token of at most 256 characters for expectClass.`);
+        else if (typeof step.className !== 'undefined' && step.action !== 'expectClass') errors.push(`${stepAt}.className: is supported only for expectClass.`);
+        if (step.action === 'expectClass' && typeof step.present !== 'boolean') errors.push(`${stepAt}.present: must be boolean for expectClass.`);
+        else if (typeof step.present !== 'undefined' && step.action !== 'expectClass') errors.push(`${stepAt}.present: is supported only for expectClass.`);
+        if (step.action === 'expectClass') {
+          const supportedClassFields = new Set(['action', 'selector', 'className', 'present']);
+          for (const key of Object.keys(step)) if (!supportedClassFields.has(key)) errors.push(`${stepAt}.${key}: is not supported for expectClass.`);
+        }
         if (step.action === 'expectAttribute' && (typeof step.attribute !== 'string' || !step.attribute.trim() || characterCount(step.attribute) > 256)) errors.push(`${stepAt}.attribute: must be a non-empty attribute name of at most 256 characters for expectAttribute.`);
         else if (['expectAttributeExists', 'expectAttributeMissing'].includes(step.action) && (typeof step.attribute !== 'string' || !step.attribute.trim() || characterCount(step.attribute) > 256)) errors.push(`${stepAt}.attribute: must be a non-empty attribute name of at most 256 characters for ${step.action}.`);
         else if (typeof step.attribute !== 'undefined' && !['expectAttribute', 'expectAttributeExists', 'expectAttributeMissing'].includes(step.action)) errors.push(`${stepAt}.attribute: is supported only for attribute assertions.`);
