@@ -50,6 +50,19 @@ async function waitForText(locator, expected, timeoutMs, exact = false) {
   throw new Error(`Expected text ${JSON.stringify(expected)}; last text was ${JSON.stringify(lastText)}.`);
 }
 
+async function waitForAccessibleName(locator, expected, timeoutMs, exact = false) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const ariaLabel = await locator.getAttribute('aria-label').catch(() => null);
+    const alt = ariaLabel === null ? await locator.getAttribute('alt').catch(() => null) : null;
+    const fallback = ariaLabel ?? alt;
+    const name = fallback ?? await locator.innerText().catch(() => '');
+    if (exact ? name === expected : name.includes(expected)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('Expected selected element accessible name to match configured text.');
+}
+
 async function waitForValue(locator, expected, timeoutMs) {
   const end = Date.now() + timeoutMs;
   let lastValue;
@@ -137,6 +150,10 @@ async function waitForFocused(locator, timeoutMs) {
 async function performStep(page, step, timeoutMs) {
   if (step.action === 'expectTitle') {
     await waitForTitle(page, step.value, timeoutMs, step.exact === true);
+    return;
+  }
+  if (step.action === 'expectAccessibleName') {
+    await waitForAccessibleName(page.locator(step.selector).first(), step.value, timeoutMs, step.exact === true);
     return;
   }
   if (step.action === 'expectEnabled' || step.action === 'expectDisabled') {

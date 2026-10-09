@@ -99,6 +99,7 @@
             "expectHidden",
             "expectText",
             "expectValue",
+            "expectAccessibleName",
             "expectAttribute",
             "expectAttributeExists",
             "expectAttributeMissing",
@@ -225,6 +226,7 @@
                   "press",
                   "expectText",
                   "expectValue",
+                  "expectAccessibleName",
                   "expectAttribute",
                   "expectTitle"
                 ]

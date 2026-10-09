@@ -852,7 +852,7 @@ module.exports = {
             },
             waitForURL: async () => {},
             title: async () => 'Dashboard',
-            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async () => selector === '.focused' }),
+            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => selector === '.named' ? 'Save changes' : 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? selector === '.named' ? 'Save changes' : selector === '[role=status]' ? 'Ready' : null : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async () => selector === '.focused' }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -882,6 +882,9 @@ module.exports = {
       { action: 'expectFocused', selector: '.focused' },
       { action: 'expectAttributeExists', selector: '.inert', attribute: 'inert' },
       { action: 'expectAttributeMissing', selector: '.missing-attribute', attribute: 'aria-hidden' },
+      { action: 'expectAccessibleName', selector: '.named', value: 'Save' },
+      { action: 'expectAccessibleName', selector: '.named', value: 'Save changes', exact: true },
+      { action: 'expectAccessibleName', selector: '.visible-name', value: 'Dashboard' },
     ],
     failOnHttpError: false,
   });
@@ -979,6 +982,38 @@ test('browser attribute-presence assertions distinguish present empty values fro
     result = await invoke(root, ['--validate']);
     assert.equal(result.code, 2, result.stderr || result.stdout);
   }
+});
+
+test('browser accessible-name assertions match exact or substring names without exposing text', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ id: 'accessible-name', type: 'playwright', url: 'https://example.invalid/', steps: [
+    { action: 'expectAccessibleName', selector: '.button', value: 'Save' },
+    { action: 'expectAccessibleName', selector: '.button', value: 'Save changes', exact: true },
+  ] });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  let result = await invoke(root, ['--validate']);
+  assert.equal(result.code, 0, result.stderr);
+
+  for (const mutate of [
+    (step) => { delete step.selector; },
+    (step) => { delete step.value; },
+    (step) => { step.value = 1; },
+    (step) => { step.exact = 'yes'; },
+  ]) {
+    const invalid = structuredClone(config);
+    mutate(invalid.checks[0].steps[0]);
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(invalid));
+    result = await invoke(root, ['--validate']);
+    assert.equal(result.code, 2, result.stderr || result.stdout);
+  }
+
+  const errorConfig = structuredClone(config);
+  errorConfig.checks[0].steps = [{ action: 'expectAccessibleName', selector: '.button', value: 'sensitive accessible name', exact: true }];
+  await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(errorConfig));
+  const failure = await invoke(root);
+  assert.equal(failure.code, 1);
+  const reportText = await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8');
+  assert.doesNotMatch(reportText, /sensitive accessible name|Save changes/);
 });
 
 test('timeout terminates descendant processes and marks the criterion unverified', async (t) => {
