@@ -26,7 +26,8 @@
         { "action": "expectUrl", "value": "/dashboard" },
         { "action": "expectVisible", "selector": "h1" },
         { "action": "expectText", "selector": "h1", "value": "Dashboard" },
-        { "action": "expectAttribute", "selector": "[role=status]", "attribute": "aria-label", "value": "Ready" }
+        { "action": "expectAttribute", "selector": "[role=status]", "attribute": "aria-label", "value": "Ready" },
+        { "action": "expectCount", "selector": "[data-testid=search-result]", "count": 3 }
       ],
       "failOnConsoleError": false,
       "failOnPageError": true,

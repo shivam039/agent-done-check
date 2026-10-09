@@ -851,7 +851,7 @@ module.exports = {
               handlers.console({ type: () => 'error', location: () => ({ url }), text: () => 'failed to submit replace-with-test-credential' });
             },
             waitForURL: async () => {},
-            locator: () => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null }),
+            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null, count: async () => selector === '.result' ? 3 : 0 }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -870,6 +870,8 @@ module.exports = {
       { action: 'expectUrl', value: '/dashboard' },
       { action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'Ready', exact: true },
       { action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'ead' },
+      { action: 'expectCount', selector: '.result', count: 3 },
+      { action: 'expectCount', selector: '.empty-state', count: 0 },
     ],
     failOnHttpError: false,
   });
@@ -895,6 +897,7 @@ module.exports = {
   const report = JSON.parse(await readFile(path.join(root, '.agent-done-check/report.json'), 'utf8'));
   const manifest = JSON.parse(await readFile(path.join(root, '.agent-done-check/manifest.json'), 'utf8'));
   const check = report.checks[0];
+  assert.equal(check.status, 'passed');
   assert.equal(report.status, 'unverified');
   assert.equal(check.browser.diagnostics.browserVersion, 'fake-chromium-1');
   assert.equal(check.browser.diagnostics.httpErrors.length, 1);
