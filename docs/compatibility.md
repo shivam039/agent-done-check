@@ -32,3 +32,5 @@ Deprecations will be documented in release notes and this policy, including the 
 ## Guarantees not yet made
 
 This policy documents how contract changes are handled; it does not declare the project stable. A 1.0 release will separately state the supported Node.js versions, contract guarantees, and release support window. Checks continue to execute unsandboxed with the host user's privileges, and schemas validate shape rather than proving that checks are safe or meaningful.
+
+See the [1.0 release readiness checklist](./v1-readiness-checklist.md) for the broader contract, reliability, security, consumer, and release criteria. The checklist records evidence and does not itself declare the project stable.

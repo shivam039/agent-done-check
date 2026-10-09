@@ -98,9 +98,11 @@ See [`ROADMAP.md`](./ROADMAP.md) for implemented capabilities and planned work. 
 
 ## Integration contracts
 
-JSON Schemas are published in [`schemas/`](./schemas/): [config v1](./schemas/config-v1.schema.json), [current report schema v4](./schemas/report-v3.schema.json), [previous report schema v2](./schemas/report-v2.schema.json), and [manifest schema v1](./schemas/manifest-v1.schema.json). Config `version` identifies the input format; report and manifest `schemaVersion` identify their respective output formats. Use the matching schema to validate integrations. The schemas accept additional properties so consumers can tolerate compatible additions.
+JSON Schemas are published in [`schemas/`](./schemas/): [config v1](./schemas/config-v1.schema.json), [current report schema v4](./schemas/report-v4.schema.json), [previous report schema v3](./schemas/report-v3.schema.json), [report schema v2](./schemas/report-v2.schema.json), and [manifest schema v1](./schemas/manifest-v1.schema.json). Config `version` identifies the input format; report and manifest `schemaVersion` identify their respective output formats. Use the matching schema to validate integrations. The schemas accept additional properties so consumers can tolerate compatible additions.
 
 See [`docs/compatibility.md`](./docs/compatibility.md) for compatibility, deprecation, and migration policy. Agent Done Check remains pre-1.0; this policy does not announce a 1.0 stability guarantee.
+
+The project tracks its 1.0 release gate in the [1.0 readiness checklist](./docs/v1-readiness-checklist.md).
 
 ### Commit-bound file checks
 
