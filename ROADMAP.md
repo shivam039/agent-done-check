@@ -268,4 +268,4 @@ PRD: [`docs/PRD-0.31.0-http-response-content-type.md`](./docs/PRD-0.31.0-http-re
 
 ## Later
 
-The broad release gate for 1.0 is tracked in [`docs/v1-readiness-checklist.md`](./docs/v1-readiness-checklist.md). Items remain pending until their evidence is recorded there; completing feature releases alone does not make the project ready for 1.0.
+The 1.0 readiness project is defined in [`docs/PRD-1.0.0-readiness.md`](./docs/PRD-1.0.0-readiness.md), with its evidence gate in [`docs/v1-readiness-checklist.md`](./docs/v1-readiness-checklist.md). The current interface inventory is [`docs/contracts.md`](./docs/contracts.md). Items remain pending until their evidence is recorded; completing feature releases alone does not make the project ready for 1.0.
