@@ -72,6 +72,10 @@ test('shipped command, browser, file, and HTTP configs conform to config v1 sche
   assertValid(validateConfig, attributeConfig, 'Playwright checked-state assertion');
   attributeConfig.checks[0].steps[0] = { action: 'expectUnchecked', selector: '#consent' };
   assertValid(validateConfig, attributeConfig, 'Playwright unchecked-state assertion');
+  attributeConfig.checks[0].steps[0] = { action: 'expectFocused', selector: '#search' };
+  assertValid(validateConfig, attributeConfig, 'Playwright focus assertion');
+  attributeConfig.checks[0].steps[0] = { action: 'expectFocused' };
+  assert.equal(validateConfig(attributeConfig), false);
   attributeConfig.checks[0].steps[0] = { action: 'expectAttribute', selector: '[role=status]', attribute: 'aria-label', value: 'Ready' };
   assertValid(validateConfig, attributeConfig, 'Playwright attribute assertion after title validation');
   attributeConfig.checks[0].steps[0].attribute = 'x'.repeat(257);

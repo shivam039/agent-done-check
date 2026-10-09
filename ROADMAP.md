@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.41.0 — Playwright focus assertion
+
+PRD: [`docs/PRD-0.41.0-playwright-focused-assertion.md`](./docs/PRD-0.41.0-playwright-focused-assertion.md)
+
+- Verify a selected element receives focus during a browser check.
+
 ## Completed: 0.40.0 — Playwright checked-state assertions
 
 PRD: [`docs/PRD-0.40.0-playwright-checked-state.md`](./docs/PRD-0.40.0-playwright-checked-state.md)

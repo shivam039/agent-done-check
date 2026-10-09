@@ -114,6 +114,16 @@ async function waitForChecked(locator, expected, timeoutMs) {
   throw new Error(`Expected selected checkbox or radio control to be ${expected ? 'checked' : 'unchecked'}.`);
 }
 
+async function waitForFocused(locator, timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const focused = await locator.evaluate((element) => element === element.ownerDocument.activeElement).catch(() => false);
+    if (focused) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('Expected selected element to receive focus.');
+}
+
 async function performStep(page, step, timeoutMs) {
   if (step.action === 'expectTitle') {
     await waitForTitle(page, step.value, timeoutMs, step.exact === true);
@@ -125,6 +135,10 @@ async function performStep(page, step, timeoutMs) {
   }
   if (step.action === 'expectChecked' || step.action === 'expectUnchecked') {
     await waitForChecked(page.locator(step.selector).first(), step.action === 'expectChecked', timeoutMs);
+    return;
+  }
+  if (step.action === 'expectFocused') {
+    await waitForFocused(page.locator(step.selector).first(), timeoutMs);
     return;
   }
   if (step.action === 'expectUrl') {
