@@ -852,7 +852,7 @@ module.exports = {
             },
             waitForURL: async () => {},
             title: async () => 'Dashboard',
-            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async () => selector === '.focused' }),
+            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async () => selector === '.focused' }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -880,6 +880,8 @@ module.exports = {
       { action: 'expectChecked', selector: '.checked' },
       { action: 'expectUnchecked', selector: '.unchecked' },
       { action: 'expectFocused', selector: '.focused' },
+      { action: 'expectAttributeExists', selector: '.inert', attribute: 'inert' },
+      { action: 'expectAttributeMissing', selector: '.missing-attribute', attribute: 'aria-hidden' },
     ],
     failOnHttpError: false,
   });
@@ -952,6 +954,31 @@ test('browser attribute assertion config validation rejects missing and malforme
   await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(titleConfig));
   result = await invoke(root, ['--validate']);
   assert.equal(result.code, 2, result.stderr || result.stdout);
+});
+
+test('browser attribute-presence assertions distinguish present empty values from missing attributes', async (t) => {
+  const root = await repository(t);
+  const config = baseConfig({ id: 'attribute-presence', type: 'playwright', url: 'https://example.invalid/', steps: [
+    { action: 'expectAttributeExists', selector: '[inert]', attribute: 'inert' },
+    { action: 'expectAttributeMissing', selector: 'button', attribute: 'aria-disabled' },
+  ] });
+  await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
+  let result = await invoke(root, ['--validate']);
+  assert.equal(result.code, 0, result.stderr);
+
+  for (const mutate of [
+    (step) => { delete step.attribute; },
+    (step) => { step.attribute = '   '; },
+    (step) => { step.attribute = 'x'.repeat(257); },
+    (step) => { step.value = 'unexpected'; },
+    (step) => { step.exact = true; },
+  ]) {
+    const invalid = structuredClone(config);
+    mutate(invalid.checks[0].steps[0]);
+    await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(invalid));
+    result = await invoke(root, ['--validate']);
+    assert.equal(result.code, 2, result.stderr || result.stdout);
+  }
 });
 
 test('timeout terminates descendant processes and marks the criterion unverified', async (t) => {

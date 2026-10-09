@@ -2,6 +2,10 @@
 
 This project is pre-1.0. Releases are experimental and may include breaking changes; see [compatibility and migration policy](./docs/compatibility.md).
 
+## 0.42.0 — 2026-10-09
+
+- Add Playwright assertions for attribute presence and absence without recording values.
+
 ## 0.41.0 — 2026-10-09
 
 - Add Playwright focus assertions for selected elements.
