@@ -4,7 +4,7 @@ This checklist defines the evidence to gather before declaring Agent Done Check 
 
 ## Contract and compatibility
 
-- [ ] Publish a contract inventory for config v1, report v4, manifest v1, CLI commands, exit codes, and evidence files; verify each description matches the implementation and schemas.
+- [x] Publish a contract inventory for config v1, report v4, manifest v1, CLI commands, exit codes, and evidence files; verify each description matches the implementation and schemas. See [`contracts.md`](./contracts.md). Runtime support and 1.x compatibility decisions remain separate pending items.
 - [ ] State the exact Node.js versions and operating systems supported at 1.0, including the minimum Git version and any Playwright/browser prerequisites.
 - [ ] Define the 1.x compatibility guarantee for config, report, manifest, CLI output, exit codes, and generated artifacts. Specify which additive changes are allowed and how consumers should handle unknown fields.
 - [ ] Confirm schema IDs, versions, and README references are correct. Include migration guidance for report schemas v2 and v3 and identify which schema versions remain supported.
