@@ -852,7 +852,8 @@ module.exports = {
             },
             waitForURL: async () => {},
             title: async () => 'Dashboard',
-            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => selector === '.named' ? 'Save changes' : 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? selector === '.named' ? 'Save changes' : selector === '[role=status]' ? 'Ready' : null : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async () => selector === '.focused' }),
+            getByRole: (role, options) => ({ role, ...options }),
+            locator: (selector) => ({ first() { return this; }, and: (role) => ({ count: async () => selector === '.named' && role.role === 'button' && (role.exact ? role.name === 'Save changes' : 'Save changes'.includes(role.name)) ? 1 : 0 }), fill: async () => {}, waitFor: async () => {}, innerText: async () => selector === '.named' ? 'Save changes' : 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? selector === '.named' ? 'Save changes' : selector === '[role=status]' ? 'Ready' : null : name === 'inert' && selector === '.inert' ? '' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked', evaluate: async () => selector === '.focused' }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -882,9 +883,8 @@ module.exports = {
       { action: 'expectFocused', selector: '.focused' },
       { action: 'expectAttributeExists', selector: '.inert', attribute: 'inert' },
       { action: 'expectAttributeMissing', selector: '.missing-attribute', attribute: 'aria-hidden' },
-      { action: 'expectAccessibleName', selector: '.named', value: 'Save' },
-      { action: 'expectAccessibleName', selector: '.named', value: 'Save changes', exact: true },
-      { action: 'expectAccessibleName', selector: '.visible-name', value: 'Dashboard' },
+      { action: 'expectAccessibleName', selector: '.named', role: 'button', value: 'Save' },
+      { action: 'expectAccessibleName', selector: '.named', role: 'button', value: 'Save changes', exact: true },
     ],
     failOnHttpError: false,
   });
@@ -987,8 +987,8 @@ test('browser attribute-presence assertions distinguish present empty values fro
 test('browser accessible-name assertions match exact or substring names without exposing text', async (t) => {
   const root = await repository(t);
   const config = baseConfig({ id: 'accessible-name', type: 'playwright', url: 'https://example.invalid/', steps: [
-    { action: 'expectAccessibleName', selector: '.button', value: 'Save' },
-    { action: 'expectAccessibleName', selector: '.button', value: 'Save changes', exact: true },
+    { action: 'expectAccessibleName', selector: '.button', role: 'button', value: 'Save' },
+    { action: 'expectAccessibleName', selector: '.button', role: 'button', value: 'Save changes', exact: true },
   ] });
   await commitFiles(root, { 'agent-done-check.json': JSON.stringify(config) });
   let result = await invoke(root, ['--validate']);
@@ -999,6 +999,8 @@ test('browser accessible-name assertions match exact or substring names without 
     (step) => { delete step.value; },
     (step) => { step.value = 1; },
     (step) => { step.exact = 'yes'; },
+    (step) => { delete step.role; },
+    (step) => { step.role = 'not-a-role'; },
   ]) {
     const invalid = structuredClone(config);
     mutate(invalid.checks[0].steps[0]);
@@ -1008,7 +1010,7 @@ test('browser accessible-name assertions match exact or substring names without 
   }
 
   const errorConfig = structuredClone(config);
-  errorConfig.checks[0].steps = [{ action: 'expectAccessibleName', selector: '.button', value: 'sensitive accessible name', exact: true }];
+  errorConfig.checks[0].steps = [{ action: 'expectAccessibleName', selector: '.button', role: 'button', value: 'sensitive accessible name', exact: true }];
   await writeFile(path.join(root, 'agent-done-check.json'), JSON.stringify(errorConfig));
   const failure = await invoke(root);
   assert.equal(failure.code, 1);

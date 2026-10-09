@@ -6,7 +6,7 @@ Browser checks need to verify the name presented to assistive technology for con
 
 ## Product change
 
-Add `expectAccessibleName` with a CSS `selector` and expected string `value`. Match a substring by default; set `exact: true` to require equality. Poll until the name matches or the existing browser step timeout expires. Resolve the name from `aria-label`, then `alt`, then Playwright-visible inner text.
+Add `expectAccessibleName` with a CSS `selector`, supported ARIA `role`, and expected string `value`. Match a substring by default; set `exact: true` to require equality. Poll until the selected element matches the role and computed accessible name or the existing browser step timeout expires. Use Playwright's role/name locator so the browser accessibility implementation resolves `aria-labelledby`, labels, and other supported name sources.
 
 ## Contract and safety
 
@@ -18,6 +18,7 @@ Add `expectAccessibleName` with a CSS `selector` and expected string `value`. Ma
 ## Acceptance criteria
 
 - Validate selector, string value, and optional boolean `exact`.
+- Require a supported ARIA role and reject role fields on other actions.
 - Test substring and exact name matching.
 - Ensure failure messages do not include the expected or observed name.
 - Update runtime/schema support, browser example, README, changelog, roadmap, and packaged PRD.
@@ -27,6 +28,6 @@ Add `expectAccessibleName` with a CSS `selector` and expected string `value`. Ma
 - Confirm a mismatched accessible name cannot pass in either exact or substring mode.
 - Confirm attribute-read failures do not become a match and time out within the configured step bound.
 - Confirm no accessible name, page text, or form value appears in failure output.
-- Confirm only supported name sources are consulted and selector scoping remains intact.
+- Confirm Playwright computes the accessible name and the CSS selector scopes the matched role/name.
 
-Review outcome: substring and exact matching both use the selected locator; `aria-label`, then `alt`, then inner text are tried, and read failures remain non-matches until timeout. Failure text is fixed and excludes expected and observed names. The selector and optional exact flag are validated, and commit binding/report shape are unchanged.
+Review outcome: Playwright's `getByRole(role, { name, exact })` computes and matches the accessible name, and intersecting it with the configured CSS locator preserves selector scoping. Counts are retried until the existing step deadline; failures emit a fixed message without names. Role/action validation is strict, and commit binding/report shape are unchanged.

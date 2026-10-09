@@ -4,7 +4,7 @@ This project is pre-1.0. Releases are experimental and may include breaking chan
 
 ## 0.43.0 — 2026-10-09
 
-- Add Playwright accessible-name assertions with exact or substring matching.
+- Add Playwright computed accessible-name assertions with exact or substring matching.
 
 ## 0.42.0 — 2026-10-09
 

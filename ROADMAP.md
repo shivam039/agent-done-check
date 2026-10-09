@@ -4,7 +4,7 @@
 
 PRD: [`docs/PRD-0.43.0-playwright-accessible-name.md`](./docs/PRD-0.43.0-playwright-accessible-name.md)
 
-- Compare selected element accessible naming evidence without echoing names in errors.
+- Match a selected element's computed accessible name without echoing names in errors.
 
 ## Completed: 0.42.0 — Playwright attribute presence assertions
 
