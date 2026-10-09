@@ -72,6 +72,16 @@ async function waitForAttribute(locator, attribute, expected, timeoutMs, exact =
   throw new Error(`Expected attribute ${JSON.stringify(attribute)} ${exact ? 'to equal' : 'to contain'} ${JSON.stringify(expected)}; last value was ${JSON.stringify(lastValue)}.`);
 }
 
+async function waitForAttributePresence(locator, attribute, expected, timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const value = await locator.getAttribute(attribute).catch(() => null);
+    if ((value !== null) === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Expected selected element attribute ${JSON.stringify(attribute)} to be ${expected ? 'present' : 'absent'}.`);
+}
+
 async function waitForCount(locator, expected, timeoutMs) {
   const end = Date.now() + timeoutMs;
   let lastCount = null;
@@ -139,6 +149,10 @@ async function performStep(page, step, timeoutMs) {
   }
   if (step.action === 'expectFocused') {
     await waitForFocused(page.locator(step.selector).first(), timeoutMs);
+    return;
+  }
+  if (step.action === 'expectAttributeExists' || step.action === 'expectAttributeMissing') {
+    await waitForAttributePresence(page.locator(step.selector).first(), step.attribute, step.action === 'expectAttributeExists', timeoutMs);
     return;
   }
   if (step.action === 'expectUrl') {

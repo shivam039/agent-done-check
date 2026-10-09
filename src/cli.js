@@ -835,13 +835,15 @@ function validate(config) {
       else if (check.steps.length > MAX_STEPS) errors.push(`${at}.steps: no more than ${MAX_STEPS} browser steps are allowed.`);
       else for (const [stepIndex, step] of check.steps.entries()) {
         const stepAt = `${at}.steps[${stepIndex}]`;
-        const actions = ['click', 'fill', 'check', 'uncheck', 'selectOption', 'press', 'expectVisible', 'expectHidden', 'expectText', 'expectValue', 'expectAttribute', 'expectCount', 'expectTitle', 'expectEnabled', 'expectDisabled', 'expectChecked', 'expectUnchecked', 'expectFocused', 'expectUrl'];
+        const actions = ['click', 'fill', 'check', 'uncheck', 'selectOption', 'press', 'expectVisible', 'expectHidden', 'expectText', 'expectValue', 'expectAttribute', 'expectAttributeExists', 'expectAttributeMissing', 'expectCount', 'expectTitle', 'expectEnabled', 'expectDisabled', 'expectChecked', 'expectUnchecked', 'expectFocused', 'expectUrl'];
         if (!step || typeof step !== 'object' || Array.isArray(step)) { errors.push(`${stepAt}: must be an object.`); continue; }
         if (!actions.includes(step.action)) errors.push(`${stepAt}.action: unsupported browser action.`);
         if (!['expectUrl', 'expectTitle'].includes(step.action) && (typeof step.selector !== 'string' || !step.selector.trim())) errors.push(`${stepAt}.selector: required for this action.`);
         if (['fill', 'selectOption', 'press', 'expectText', 'expectValue', 'expectAttribute', 'expectTitle', 'expectUrl'].includes(step.action) && typeof step.value !== 'string') errors.push(`${stepAt}.value: must be a string for ${step.action}.`);
         if (step.action === 'expectAttribute' && (typeof step.attribute !== 'string' || !step.attribute.trim() || characterCount(step.attribute) > 256)) errors.push(`${stepAt}.attribute: must be a non-empty attribute name of at most 256 characters for expectAttribute.`);
-        else if (typeof step.attribute !== 'undefined' && step.action !== 'expectAttribute') errors.push(`${stepAt}.attribute: is supported only for expectAttribute.`);
+        else if (['expectAttributeExists', 'expectAttributeMissing'].includes(step.action) && (typeof step.attribute !== 'string' || !step.attribute.trim() || characterCount(step.attribute) > 256)) errors.push(`${stepAt}.attribute: must be a non-empty attribute name of at most 256 characters for ${step.action}.`);
+        else if (typeof step.attribute !== 'undefined' && !['expectAttribute', 'expectAttributeExists', 'expectAttributeMissing'].includes(step.action)) errors.push(`${stepAt}.attribute: is supported only for attribute assertions.`);
+        if (['expectAttributeExists', 'expectAttributeMissing'].includes(step.action) && (typeof step.value !== 'undefined' || typeof step.exact !== 'undefined')) errors.push(`${stepAt}: value and exact are not supported for ${step.action}.`);
         if (step.action === 'expectCount' && (!Number.isInteger(step.count) || step.count < 0 || step.count > 1_000_000)) errors.push(`${stepAt}.count: must be an integer from 0 through 1000000 for expectCount.`);
         else if (typeof step.count !== 'undefined' && step.action !== 'expectCount') errors.push(`${stepAt}.count: is supported only for expectCount.`);
         if (typeof step.exact !== 'undefined' && typeof step.exact !== 'boolean') errors.push(`${stepAt}.exact: must be boolean.`);

@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.42.0 — Playwright attribute presence assertions
+
+PRD: [`docs/PRD-0.42.0-playwright-attribute-presence.md`](./docs/PRD-0.42.0-playwright-attribute-presence.md)
+
+- Verify a DOM attribute exists or is absent without matching or recording its value.
+
 ## Completed: 0.41.0 — Playwright focus assertion
 
 PRD: [`docs/PRD-0.41.0-playwright-focused-assertion.md`](./docs/PRD-0.41.0-playwright-focused-assertion.md)
