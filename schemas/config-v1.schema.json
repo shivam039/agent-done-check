@@ -106,6 +106,7 @@
             "expectDisabled",
             "expectChecked",
             "expectUnchecked",
+            "expectFocused",
             "expectUrl"
           ]
         },

@@ -30,7 +30,8 @@
         { "action": "expectCount", "selector": "[data-testid=search-result]", "count": 3 },
         { "action": "expectTitle", "value": "Dashboard", "exact": true },
         { "action": "expectEnabled", "selector": "button[type=submit]" },
-        { "action": "expectChecked", "selector": "[name=terms]" }
+        { "action": "expectChecked", "selector": "[name=terms]" },
+        { "action": "expectFocused", "selector": "[name=email]" }
       ],
       "failOnConsoleError": false,
       "failOnPageError": true,

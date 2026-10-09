@@ -2,6 +2,10 @@
 
 This project is pre-1.0. Releases are experimental and may include breaking changes; see [compatibility and migration policy](./docs/compatibility.md).
 
+## 0.41.0 — 2026-10-09
+
+- Add Playwright focus assertions for selected elements.
+
 ## 0.40.0 — 2026-10-09
 
 - Add Playwright checked and unchecked assertions for checkbox and radio controls.
