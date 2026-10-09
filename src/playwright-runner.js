@@ -104,6 +104,16 @@ async function waitForEnabled(locator, expected, timeoutMs) {
   throw new Error(`Expected selected element to be ${expected ? 'enabled' : 'disabled'}.`);
 }
 
+async function waitForChecked(locator, expected, timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const checked = await locator.isChecked().catch(() => null);
+    if (checked === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Expected selected checkbox or radio control to be ${expected ? 'checked' : 'unchecked'}.`);
+}
+
 async function performStep(page, step, timeoutMs) {
   if (step.action === 'expectTitle') {
     await waitForTitle(page, step.value, timeoutMs, step.exact === true);
@@ -111,6 +121,10 @@ async function performStep(page, step, timeoutMs) {
   }
   if (step.action === 'expectEnabled' || step.action === 'expectDisabled') {
     await waitForEnabled(page.locator(step.selector).first(), step.action === 'expectEnabled', timeoutMs);
+    return;
+  }
+  if (step.action === 'expectChecked' || step.action === 'expectUnchecked') {
+    await waitForChecked(page.locator(step.selector).first(), step.action === 'expectChecked', timeoutMs);
     return;
   }
   if (step.action === 'expectUrl') {

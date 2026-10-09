@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.40.0 — Playwright checked-state assertions
+
+PRD: [`docs/PRD-0.40.0-playwright-checked-state.md`](./docs/PRD-0.40.0-playwright-checked-state.md)
+
+- Verify checkbox or radio controls are checked or unchecked in browser checks.
+
 ## Completed: 0.39.0 — Playwright enabled-state assertions
 
 PRD: [`docs/PRD-0.39.0-playwright-enabled-state.md`](./docs/PRD-0.39.0-playwright-enabled-state.md)

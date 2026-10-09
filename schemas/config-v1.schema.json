@@ -104,6 +104,8 @@
             "expectTitle",
             "expectEnabled",
             "expectDisabled",
+            "expectChecked",
+            "expectUnchecked",
             "expectUrl"
           ]
         },

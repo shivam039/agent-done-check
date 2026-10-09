@@ -852,7 +852,7 @@ module.exports = {
             },
             waitForURL: async () => {},
             title: async () => 'Dashboard',
-            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled' }),
+            locator: (selector) => ({ first() { return this; }, fill: async () => {}, waitFor: async () => {}, innerText: async () => 'Dashboard', textContent: async () => '', getAttribute: async (name) => name === 'content' ? process.env.AGENT_DONE_CHECK_TARGET_COMMIT : name === 'aria-label' ? 'Ready' : null, count: async () => selector === '.result' ? 3 : 0, isEnabled: async () => selector !== '.disabled', isChecked: async () => selector === '.checked' }),
             screenshot: async ({ path }) => fs.writeFileSync(path, 'fake-png'),
           };
         },
@@ -877,6 +877,8 @@ module.exports = {
       { action: 'expectTitle', value: 'board' },
       { action: 'expectEnabled', selector: '.enabled' },
       { action: 'expectDisabled', selector: '.disabled' },
+      { action: 'expectChecked', selector: '.checked' },
+      { action: 'expectUnchecked', selector: '.unchecked' },
     ],
     failOnHttpError: false,
   });
