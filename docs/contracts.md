@@ -1,6 +1,6 @@
 # Public contract inventory
 
-This page indexes the current public input, output, command-line, and artifact contracts. It describes the current 0.45.0 release; it does not promise that they are stable before 1.0. Version markers are independent: package version 0.45.0, config version 1, report schema version 4, and manifest schema version 1.
+This page indexes the current public input, output, command-line, and artifact contracts. It describes the current 0.46.0 release; it does not promise that they are stable before 1.0. Version markers are independent: package version 0.46.0, config version 1, report schema version 4, and manifest schema version 1.
 
 ## Configuration and check types
 

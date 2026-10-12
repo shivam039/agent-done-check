@@ -60,7 +60,7 @@ Track the individual requirements and their evidence in [`v1-readiness-checklist
 
 ## Current baseline and open decisions
 
-- Current package version is 0.45.0; config is v1, report is v4, manifest is v1.
+- Current package version is 0.46.0; config is v1, report is v4, manifest is v1.
 - CI currently covers Node.js 22 and 24 on Ubuntu, macOS, and Windows. This is evidence of tested combinations, not yet a support promise.
 - npm Trusted Publishing completed a successful OIDC publish for 0.45.0 on 2026-10-09; the publisher was reported Valid.
 - The exact minimum Git version, the 1.x support window, contract support/deprecation periods, external-consumer evidence, and the final stability guarantee remain unresolved.
