@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.46.0 — Clean-consumer package smoke test
+
+PRD: [`docs/PRD-0.46.0-consumer-package-smoke.md`](./docs/PRD-0.46.0-consumer-package-smoke.md)
+
+- Install the packed tarball into a temporary consumer repository and run a commit-bound CLI check in the Node.js and OS CI matrix.
+
 ## Completed: 0.45.0 — Playwright accessible-description assertion
 
 PRD: [`docs/PRD-0.45.0-playwright-accessible-description.md`](./docs/PRD-0.45.0-playwright-accessible-description.md)

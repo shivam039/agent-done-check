@@ -26,3 +26,6 @@ jobs:
       - run: npm ci
       - run: node --test
       - run: node ./bin/agent-done-check.js --help
+      - name: Verify the packed package in a clean consumer
+        shell: bash
+        run: bash ./scripts/consumer-package-smoke.sh

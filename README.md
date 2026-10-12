@@ -79,6 +79,8 @@ Run the test suite with:
 npm test
 ```
 
+CI also installs the packed tarball in a clean consumer repository and runs a commit-bound check through the installed CLI.
+
 For GitHub Actions, see [`examples/github-actions.yml`](./examples/github-actions.yml). It runs checks against the triggering commit and uploads the report bundle. Review and adapt the sample workflow before using it: it runs commands from the repository under test.
 
 Other repositories can call the read-only reusable workflow at [`.github/workflows/reusable-verify.yml`](./.github/workflows/reusable-verify.yml). Pin both the workflow ref and its `tool-ref` input to a reviewed commit SHA or release tag:

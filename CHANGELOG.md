@@ -2,6 +2,10 @@
 
 This project is pre-1.0. Releases are experimental and may include breaking changes; see [compatibility and migration policy](./docs/compatibility.md).
 
+## 0.46.0 — 2026-10-12
+
+- Verify the packed package from a clean consumer repository on the full CI matrix.
+
 ## 0.45.0 — 2026-10-09
 
 - Add Playwright computed accessible-description assertions.

@@ -22,7 +22,7 @@ This checklist defines the evidence to gather before declaring Agent Done Check 
 
 ## Consumer and documentation readiness
 
-- [ ] Validate the documented install and CLI flows from a clean consumer project using the packed tarball and the declared minimum Node.js version.
+- [ ] Validate the documented install and CLI flows from a clean consumer project using the packed tarball and the declared minimum Node.js version. The 0.46.0 CI smoke test installs the tarball and runs a commit-bound audit on Node.js 22/24 across Linux, macOS, and Windows; finalize this gate after its matrix passes and the 1.0 minimum runtime is declared.
 - [ ] Exercise command, file, HTTP, and Playwright examples against representative consumer projects; record feedback and resolve release-blocking issues.
 - [ ] Review the README, compatibility policy, examples, schemas, roadmap, changelog, and every packaged PRD for accuracy and consistency with the shipped code.
 - [ ] Explain how to install and configure optional Playwright/browser dependencies, what browser versions are supported, and how browser checks behave when dependencies are absent.
