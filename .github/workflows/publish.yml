@@ -30,5 +30,8 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Verify the release package in a clean consumer
+        shell: bash
+        run: bash ./scripts/consumer-package-smoke.sh
       - name: Publish package with npm Trusted Publishing
         run: npm publish --access public
