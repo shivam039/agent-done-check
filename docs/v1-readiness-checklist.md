@@ -22,7 +22,7 @@ This checklist defines the evidence to gather before declaring Agent Done Check 
 
 ## Consumer and documentation readiness
 
-- [ ] Validate the documented install and CLI flows from a clean consumer project using the packed tarball and the declared minimum Node.js version. The 0.46.0 CI smoke test installs the tarball and runs a commit-bound audit on Node.js 22/24 across Linux, macOS, and Windows; finalize this gate after its matrix passes and the 1.0 minimum runtime is declared.
+- [ ] Validate the documented install and CLI flows from a clean consumer project using the packed tarball and the declared minimum Node.js version. The 0.46.0 CI smoke test installs the tarball and runs a commit-bound audit on Node.js 22/24 across Linux, macOS, and Windows; 0.47.0 also runs that smoke test on the release-tag package before npm publishing. Finalize this gate after the matrix passes and the 1.0 minimum runtime is declared.
 - [ ] Exercise command, file, HTTP, and Playwright examples against representative consumer projects; record feedback and resolve release-blocking issues.
 - [ ] Review the README, compatibility policy, examples, schemas, roadmap, changelog, and every packaged PRD for accuracy and consistency with the shipped code.
 - [ ] Explain how to install and configure optional Playwright/browser dependencies, what browser versions are supported, and how browser checks behave when dependencies are absent.
@@ -34,7 +34,7 @@ This checklist defines the evidence to gather before declaring Agent Done Check 
 - [x] Confirm npm Trusted Publishing succeeds from the configured GitHub Actions workflow. First successful OIDC publish completed for 0.45.0 on 2026-10-09; npm reported the publisher as valid.
 - [ ] Verify package metadata, MIT license detection, npm description and keywords, repository links, supported engine range, and public access on the 1.0 candidate.
 - [ ] Review `npm pack --dry-run` output and install the resulting tarball in a clean project; confirm all required docs, schemas, examples, and executable files are included.
-- [ ] Confirm the release workflow checks tag/version agreement, runs the full CI suite, publishes provenance, and fails safely on any mismatch or test failure.
+- [ ] Confirm the release workflow checks tag/version agreement, runs the full CI suite, publishes provenance, and fails safely on any mismatch or test failure. 0.47.0 adds a pre-publish clean-consumer check of the release tarball; provenance and full release-candidate evidence remain to be confirmed.
 - [ ] Prepare release notes that call out the stability commitment, supported platforms, compatibility guarantees, migration steps, known limitations, and support window.
 - [ ] Verify the 1.0 Git tag points to the reviewed `main` commit, the GitHub release and npm version agree, and the post-publish package page and install flow are correct.
 - [ ] Document the recovery procedure for a failed or compromised release, including yanking/deprecation policy, follow-up patch release, and maintainer notification steps.

@@ -1,5 +1,11 @@
 # Agent Done Check roadmap
 
+## Completed: 0.47.0 — Release package consumer gate
+
+PRD: [`docs/PRD-0.47.0-publish-consumer-gate.md`](./docs/PRD-0.47.0-publish-consumer-gate.md)
+
+- Run the clean-consumer tarball smoke test in the npm publishing workflow before the publish step.
+
 ## Completed: 0.46.0 — Clean-consumer package smoke test
 
 PRD: [`docs/PRD-0.46.0-consumer-package-smoke.md`](./docs/PRD-0.46.0-consumer-package-smoke.md)

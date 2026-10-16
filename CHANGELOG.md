@@ -2,6 +2,10 @@
 
 This project is pre-1.0. Releases are experimental and may include breaking changes; see [compatibility and migration policy](./docs/compatibility.md).
 
+## 0.47.0 — 2026-10-16
+
+- Gate npm publishing on a clean-consumer install and commit-bound CLI smoke test of the release tarball.
+
 ## 0.46.0 — 2026-10-12
 
 - Verify the packed package from a clean consumer repository on the full CI matrix.

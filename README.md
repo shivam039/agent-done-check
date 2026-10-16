@@ -22,7 +22,7 @@ npm install
 node ./bin/agent-done-check.js --config agent-done-check.json
 ```
 
-Releases are published from GitHub Actions using npm Trusted Publishing (OIDC). Maintainers create a GitHub release for a `vX.Y.Z` tag that points to `main`; the publish workflow verifies the tag matches `package.json`, installs dependencies, runs the test suite, and publishes to npm without a stored npm token.
+Releases are published from GitHub Actions using npm Trusted Publishing (OIDC). Maintainers create a GitHub release for a `vX.Y.Z` tag that points to `main`; the publish workflow verifies the tag matches `package.json`, installs dependencies, runs the test suite, packs and installs the release tarball in a clean consumer, runs a commit-bound CLI check, and only then publishes to npm without a stored npm token.
 
 To verify a specific revision, add `--commit <full-or-resolvable-revision>`. The default is `HEAD`. By default, the JSON report, Markdown report, and manifest are written under `.agent-done-check/`. Captured command output and browser screenshots are stored under `.agent-done-check/evidence/<run-id>/`. The `--output` and `--markdown-output` options can change the report paths.
 
